@@ -1,0 +1,79 @@
+{
+  "name": "@effector-kit/forms",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "private": false,
+  "version": "0.16.0",
+  "description": "Effector composable forms",
+  "keywords": [
+    "effector",
+    "composable",
+    "form",
+    "forms",
+    "validation",
+    "effector-reform",
+    "reform",
+    "effect-react-form",
+    "effector-form",
+    "effector-kit",
+    "effector",
+    "kit"
+  ],
+  "author": "movpushmov",
+  "homepage": "https://github.com/movpushmov/effector-kit#readme",
+  "license": "MIT",
+  "directories": {
+    "lib": "lib"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./react": {
+      "import": "./dist/react.js",
+      "require": "./dist/react.cjs"
+    },
+    "./zod": {
+      "import": "./dist/zod.js",
+      "require": "./dist/zod.cjs"
+    },
+    "./next": {
+      "import": "./dist/next.js",
+      "require": "./dist/next.cjs"
+    },
+    "./react-next": {
+      "import": "./dist/react-next.js",
+      "require": "./dist/react-next.cjs"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/movpushmov/effector-kit.git"
+  },
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run"
+  },
+  "bugs": {
+    "url": "https://github.com/movpushmov/effector-kit/issues"
+  },
+  "peerDependencies": {
+    "@withease/contracts": ">=1.1.0 <2",
+    "effector": ">=23.4.4",
+    "patronum": ">=2.2.0 <3",
+    "zod": ">=4"
+  },
+  "dependencies": {
+    "fast-deep-equal": "^3.1.3"
+  },
+  "packageManager": "pnpm@10.10.0"
+}

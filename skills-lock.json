@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "effectorjs": {
+      "source": "aiko-atami/effectorjs-skills",
+      "sourceType": "github",
+      "computedHash": "ef9db8af751d6636895fe6c30465d5d8433a4ffae58558f55f44fb62ab58d008"
+    }
+  }
+}

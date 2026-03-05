@@ -1,0 +1,5 @@
+version: 1
+interface:
+  display_name: "EffectorJS"
+  short_description: "Model and review Effector with lint-backed v23+ best practices"
+  default_prompt: "Use this skill to model, refactor, and review Effector state management with modern v23+ patterns, lint-derived best practices from eslint-plugin-effector, scope/SSR safety, and React useUnit guidance."
