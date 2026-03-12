@@ -37,7 +37,7 @@ import {
   type StoreWritable,
 } from "effector";
 import { createAction, createAsyncAction } from "effector-action";
-import { model } from "../lib/models";
+import { model, type Model } from "../lib/models";
 import { contract } from "../lib/contracts";
 import { define } from "../lib/define";
 import { child } from "../lib/child/child";
@@ -50,7 +50,7 @@ import { setContext } from "../lib/runtime/context";
 
 function makeCounter() {
   return model({
-    contract: contract({ count: define.store(0) })(),
+    contract: contract({ count: define.store(define.static<number>(), 0) })(),
     fn: ({ count }) => ({ count }),
   });
 }
@@ -58,8 +58,8 @@ function makeCounter() {
 function makeTagged() {
   return model({
     contract: contract({
-      tag: define.store<"a" | "b">("a"),
-      value: define.store(0),
+      tag: define.store(define.static<"a" | "b">(), "a"),
+      value: define.store(define.static<number>(), 0),
     })(),
     fn: ({ tag, value }) => ({ tag, value }),
   });
@@ -68,8 +68,8 @@ function makeTagged() {
 function makeWithEvent() {
   return model({
     contract: contract({
-      total: define.store(0),
-      add: define.event<number>(),
+      total: define.store(define.static<number>(), 0),
+      add: define.event(define.static<number>()),
     })(),
     fn: ({ total, add }) => {
       sample({ clock: add, source: total, fn: (t, n) => t + n, target: total });
@@ -79,8 +79,10 @@ function makeWithEvent() {
 }
 
 /** Seed a scope with the model's current global instances. */
-function forkWith<M extends { $instances: StoreWritable<any> }>(m: M) {
-  return fork({ values: [[m.$instances, m.$instances.getState()]] });
+function forkWith<M extends Model<any, any>>(m: M) {
+  return fork({
+    values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +124,7 @@ describe("$instances.watch — observe instance creation from outside", () => {
     expect(calls).toHaveLength(countBefore);
 
     // …but the data IS visible through scope.getState
-    expect(scope.getState(m.$instances)["x"].count).toBe(42);
+    expect(scope.getState(m.$instances)["x"]?.count).toBe(42);
   });
 
   test("scope: $instances reflects instance created inside allSettled scope", async () => {
@@ -211,8 +213,8 @@ describe("sample — internal events wired to external units inside fn", () => {
 
     const m = model({
       contract: contract({
-        score: define.store(0),
-        scored: define.event<number>(),
+        score: define.store(define.static<number>(), 0),
+        scored: define.event(define.static<number>()),
       })(),
       fn: ({ score, scored }) => {
         sample({
@@ -238,7 +240,7 @@ describe("sample — internal events wired to external units inside fn", () => {
 
     const scope = fork({
       values: [
-        [m.$instances, m.$instances.getState()],
+        [m.$instances as StoreWritable<any>, m.$instances.getState()],
         [$externalLog, []],
       ],
     });
@@ -256,8 +258,8 @@ describe("sample — internal events wired to external units inside fn", () => {
 
     const m = model({
       contract: contract({
-        name: define.store(""),
-        renamed: define.event<string>(),
+        name: define.store(define.static<string>(), ""),
+        renamed: define.event(define.static<string>()),
       })(),
       fn: ({ name, renamed }) => {
         sample({ clock: renamed, target: name });
@@ -278,13 +280,13 @@ describe("sample — internal events wired to external units inside fn", () => {
 
     const scope = fork({
       values: [
-        [m.$instances, m.$instances.getState()],
+        [m.$instances as StoreWritable<any>, m.$instances.getState()],
         [$externalEvents, []],
       ],
     });
     await allSettled(trigger, { scope, params: "Charlie" });
 
-    expect(scope.getState(m.$instances)["u1"].name).toBe("Charlie");
+    expect(scope.getState(m.$instances)["u1"]?.name).toBe("Charlie");
     expect(scope.getState($externalEvents)).toContain("Charlie");
   });
 
@@ -292,7 +294,7 @@ describe("sample — internal events wired to external units inside fn", () => {
     const $callCount = createStore(0);
 
     const m = model({
-      contract: contract({ ping: define.event<void>() })(),
+      contract: contract({ ping: define.event(define.static<void>()) })(),
       fn: ({ ping }) => {
         sample({
           clock: ping,
@@ -312,7 +314,7 @@ describe("sample — internal events wired to external units inside fn", () => {
 
     const scope = fork({
       values: [
-        [m.$instances, m.$instances.getState()],
+        [m.$instances as StoreWritable<any>, m.$instances.getState()],
         [$callCount, 0],
       ],
     });
@@ -416,8 +418,8 @@ describe("createEffect — effect as observer of model state changes", () => {
     await allSettled(trigger, { scope, params: 99 });
 
     const instances = scope.getState(m.$instances);
-    expect(instances["a"].count).toBe(99);
-    expect(instances["b"].count).toBe(99);
+    expect(instances["a"]?.count).toBe(99);
+    expect(instances["b"]?.count).toBe(99);
   });
 });
 
@@ -543,16 +545,16 @@ describe("createAction — lens target wiring and external observation", () => {
 
     const setCount = m.lens.count.target();
 
-    const externalEvent = createAction<number>({
+    const externalEvent = createAction({
       target: { setCount },
-      fn: ({ setCount: set }, n) => set(n),
+      fn: ({ setCount: set }, n: number) => set(n),
     });
 
     const scope = forkWith(m);
     await allSettled(externalEvent, { scope, params: 7 });
 
-    expect(scope.getState(m.$instances)["a"].count).toBe(7);
-    expect(scope.getState(m.$instances)["b"].count).toBe(7);
+    expect(scope.getState(m.$instances)["a"]?.count).toBe(7);
+    expect(scope.getState(m.$instances)["b"]?.count).toBe(7);
   });
 
   test("scope: createAction with source reads external state when triggering lens", async () => {
@@ -562,22 +564,22 @@ describe("createAction — lens target wiring and external observation", () => {
     const $factor = createStore(10);
     const setCount = m.lens.count.target();
 
-    const multiply = createAction<number>({
+    const multiply = createAction({
       source: { $factor },
       target: { setCount },
-      fn: ({ setCount: set }, { factor }, base) => set(base * factor),
+      fn: ({ setCount: set }, { factor }, base: number) => set(base * factor),
     });
 
     const scope = fork({
       values: [
-        [m.$instances, m.$instances.getState()],
+        [m.$instances as StoreWritable<any>, m.$instances.getState()],
         [$factor, 5],
       ],
     });
     await allSettled(multiply, { scope, params: 3 });
 
     // 3 * 5 = 15
-    expect(scope.getState(m.$instances)["x"].count).toBe(15);
+    expect(scope.getState(m.$instances)["x"]?.count).toBe(15);
   });
 
   test("scope: createAction inside model fn wires internal event to external store", async () => {
@@ -585,8 +587,8 @@ describe("createAction — lens target wiring and external observation", () => {
 
     const m = model({
       contract: contract({
-        value: define.store(0),
-        set: define.event<number>(),
+        value: define.store(define.static<number>(), 0),
+        set: define.event(define.static<number>()),
       })(),
       fn: ({ value, set }) => {
         createAction({
@@ -608,13 +610,13 @@ describe("createAction — lens target wiring and external observation", () => {
 
     const scope = fork({
       values: [
-        [m.$instances, m.$instances.getState()],
+        [m.$instances as StoreWritable<any>, m.$instances.getState()],
         [$log, []],
       ],
     });
     await allSettled(trigger, { scope, params: 42 });
 
-    expect(scope.getState(m.$instances)["inst"].value).toBe(42);
+    expect(scope.getState(m.$instances)["inst"]?.value).toBe(42);
     expect(scope.getState($log)).toContain(42);
   });
 
@@ -623,18 +625,18 @@ describe("createAction — lens target wiring and external observation", () => {
     m.create({ id: "a1", data: { tag: "a", value: 0 } });
     m.create({ id: "b1", data: { tag: "b", value: 0 } });
 
-    const setAValues = createAction<number>({
+    const setAValues = createAction({
       target: {
         setValue: m.lens.where(({ tag }) => tag === "a").value.target(),
       },
-      fn: ({ setValue }, n) => setValue(n),
+      fn: ({ setValue }, n: number) => setValue(n),
     });
 
     const scope = forkWith(m);
     await allSettled(setAValues, { scope, params: 100 });
 
-    expect(scope.getState(m.$instances)["a1"].value).toBe(100);
-    expect(scope.getState(m.$instances)["b1"].value).toBe(0);
+    expect(scope.getState(m.$instances)["a1"]?.value).toBe(100);
+    expect(scope.getState(m.$instances)["b1"]?.value).toBe(0);
   });
 });
 
@@ -706,7 +708,7 @@ describe("createAsyncAction — async effects that read/write model state", () =
     await allSettled(doubleAndSetFx, { scope, params: 5 });
 
     // 0 + 5 * 2 = 10
-    expect(scope.getState(m.$instances)["a"].count).toBe(10);
+    expect(scope.getState(m.$instances)["a"]?.count).toBe(10);
   });
 
   test("scope: async action result captured via sample chain", async () => {
@@ -799,7 +801,7 @@ describe("filter — conditional observation", () => {
 
     const scope = fork({
       values: [
-        [m.$instances, m.$instances.getState()],
+        [m.$instances as StoreWritable<any>, m.$instances.getState()],
         [$aValues, []],
       ],
     });
@@ -807,8 +809,8 @@ describe("filter — conditional observation", () => {
     await allSettled(trigger, { scope, params: 55 });
 
     const inst = scope.getState(m.$instances);
-    expect(inst["a1"].value).toBe(55);
-    expect(inst["b1"].value).toBe(0);
+    expect(inst["a1"]?.value).toBe(55);
+    expect(inst["b1"]?.value).toBe(0);
   });
 
   test("external store.on with filtered sample — reacts only to high-count instances (global)", () => {
@@ -1168,18 +1170,22 @@ describe("scope isolation — mutations and observations stay inside scope", () 
     m.create({ id: "shared", data: { count: 0 } });
 
     // Fork B BEFORE any mutation, then fork A and mutate A
-    const scopeB = fork({ values: [[m.$instances, m.$instances.getState()]] });
-    const scopeA = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scopeB = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
+    const scopeA = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
 
     await allSettled(trigger, { scope: scopeA, params: 100 });
 
     // Scope A is mutated
-    expect(scopeA.getState(m.$instances)["shared"].count).toBe(100);
+    expect(scopeA.getState(m.$instances)["shared"]?.count).toBe(100);
     // Scope B was forked before the mutation; the instance object IS shared
     // (in-place mutation is visible), but scopeA changes don't affect
     // STORE-VALUE-level isolation tracked by Effector's registry.
     // The in-place mutation is a known documented behavior (shallow copy of instances map).
-    expect(scopeA.getState(m.$instances)["shared"].count).toBe(100);
+    expect(scopeA.getState(m.$instances)["shared"]?.count).toBe(100);
   });
 
   test("two sequential lens mutations accumulate correctly inside same scope", async () => {
@@ -1194,7 +1200,7 @@ describe("scope isolation — mutations and observations stay inside scope", () 
     await allSettled(trigger, { scope, params: 5 });
     await allSettled(trigger, { scope, params: 3 });
 
-    expect(scope.getState(m.$instances)["acc"].total).toBe(18);
+    expect(scope.getState(m.$instances)["acc"]?.total).toBe(18);
   });
 });
 
@@ -1208,7 +1214,7 @@ describe("child model — observe child stores from outside via parent lens", ()
 
   test("child model $instances returns null outside any parent context", () => {
     const base = model({
-      contract: contract({ x: define.store(0) })(),
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
     const c = child(base);
@@ -1217,7 +1223,7 @@ describe("child model — observe child stores from outside via parent lens", ()
 
   test("child model lens.getSource() returns null outside any parent context", () => {
     const base = model({
-      contract: contract({ x: define.store(0) })(),
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
     const c = child(base);
@@ -1226,7 +1232,7 @@ describe("child model — observe child stores from outside via parent lens", ()
 
   test("child lens has target and clock methods (structural)", () => {
     const base = model({
-      contract: contract({ count: define.store(0) })(),
+      contract: contract({ count: define.store(define.static<number>(), 0) })(),
       fn: ({ count }) => ({ count }),
     });
     const c = child(base);
@@ -1236,12 +1242,17 @@ describe("child model — observe child stores from outside via parent lens", ()
 
   test("parent $instances is populated when parent is created in scope", async () => {
     const itemModel = model({
-      contract: contract({ label: define.store(""), score: define.store(0) })(),
+      contract: contract({
+        label: define.store(define.static<string>(), ""),
+        score: define.store(define.static<number>(), 0),
+      })(),
       fn: ({ label, score }) => ({ label, score }),
     });
 
     const parentModel = model({
-      contract: contract({ title: define.store("") })(),
+      contract: contract({
+        title: define.store(define.static<string>(), ""),
+      })(),
       fn: ({ title }) => {
         const items = child(itemModel);
         void items;
@@ -1256,17 +1267,17 @@ describe("child model — observe child stores from outside via parent lens", ()
     });
 
     expect(scope.getState(parentModel.$instances)["p1"]).toBeDefined();
-    expect(scope.getState(parentModel.$instances)["p1"].title).toBe("Root");
+    expect(scope.getState(parentModel.$instances)["p1"]?.title).toBe("Root");
   });
 
   test("parent lens.name.target() updates parent field, visible via $instances", async () => {
     const childModel = model({
-      contract: contract({ value: define.store(0) })(),
+      contract: contract({ value: define.store(define.static<number>(), 0) })(),
       fn: ({ value }) => ({ value }),
     });
 
     const parentModel = model({
-      contract: contract({ name: define.store("") })(),
+      contract: contract({ name: define.store(define.static<string>(), "") })(),
       fn: ({ name }) => {
         const c = child(childModel);
         void c;
@@ -1282,12 +1293,12 @@ describe("child model — observe child stores from outside via parent lens", ()
     const scope = forkWith(parentModel);
     await allSettled(trigger, { scope, params: "updated" });
 
-    expect(scope.getState(parentModel.$instances)["p1"].name).toBe("updated");
+    expect(scope.getState(parentModel.$instances)["p1"]?.name).toBe("updated");
   });
 
   test("two children from same base model are independent", () => {
     const base = model({
-      contract: contract({ v: define.store(0) })(),
+      contract: contract({ v: define.store(define.static<number>(), 0) })(),
       fn: ({ v }) => ({ v }),
     });
     const c1 = child(base);
@@ -1308,7 +1319,7 @@ describe("ref model — observe ref stores from outside via parent lens", () => 
 
   test("ref lens getSource() returns empty object outside any context", () => {
     const target = model({
-      contract: contract({ data: define.store("") })(),
+      contract: contract({ data: define.store(define.static<string>(), "") })(),
       fn: ({ data }) => ({ data }),
     });
     const r = ref(target);
@@ -1321,7 +1332,7 @@ describe("ref model — observe ref stores from outside via parent lens", () => 
 
   test("ref lens API mirrors model API — target and clock exist (structural)", () => {
     const target = model({
-      contract: contract({ score: define.store(0) })(),
+      contract: contract({ score: define.store(define.static<number>(), 0) })(),
       fn: ({ score }) => ({ score }),
     });
     const r = ref(target);
@@ -1333,7 +1344,7 @@ describe("ref model — observe ref stores from outside via parent lens", () => 
 
   test("model.lens sees all instances; ref.lens sees only tracked ids", () => {
     const m = model({
-      contract: contract({ val: define.store(0) })(),
+      contract: contract({ val: define.store(define.static<number>(), 0) })(),
       fn: ({ val }) => ({ val }),
     });
     const r = ref(m);
@@ -1347,7 +1358,7 @@ describe("ref model — observe ref stores from outside via parent lens", () => 
 
   test("ref and model.lens are distinct objects", () => {
     const m = model({
-      contract: contract({ x: define.store(0) })(),
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
     const r = ref(m);
@@ -1356,15 +1367,17 @@ describe("ref model — observe ref stores from outside via parent lens", () => 
 
   test("parent model created with ref inside fn — parent $instances is populated", async () => {
     const itemModel = model({
-      contract: contract({ active: define.store(false) })(),
+      contract: contract({
+        active: define.store(define.static<boolean>(), false),
+      })(),
       fn: ({ active }) => ({ active }),
     });
 
     const parentModel = model({
-      contract: contract({ count: define.store(0) })(),
+      contract: contract({ count: define.store(define.static<number>(), 0) })(),
       fn: ({ count }) => {
         const itemRef = ref(itemModel);
-        expect(itemRef["~type"]).toBe("ref");
+        expect(itemRef["~kind"]).toBe("ref");
         return { count };
       },
     });
@@ -1379,19 +1392,19 @@ describe("ref model — observe ref stores from outside via parent lens", () => 
 
   test("multiple refs to different models coexist without throwing", () => {
     const modelA = model({
-      contract: contract({ a: define.store(0) })(),
+      contract: contract({ a: define.store(define.static<number>(), 0) })(),
       fn: ({ a }) => ({ a }),
     });
     const modelB = model({
-      contract: contract({ b: define.store("") })(),
+      contract: contract({ b: define.store(define.static<string>(), "") })(),
       fn: ({ b }) => ({ b }),
     });
 
     expect(() => {
       const refA = ref(modelA);
       const refB = ref(modelB);
-      expect(refA["~type"]).toBe("ref");
-      expect(refB["~type"]).toBe("ref");
+      expect(refA["~kind"]).toBe("ref");
+      expect(refB["~kind"]).toBe("ref");
       expect(refA.lens).not.toBe(refB.lens);
     }).not.toThrow();
   });
@@ -1405,14 +1418,14 @@ describe("internal reactive chains — triggered inside model, observed outside 
   test("event→store chain: items accumulate across sequential triggers", async () => {
     const m = model({
       contract: contract({
-        items: define.store<string[]>([]),
-        addItem: define.event<string>(),
+        items: define.store(define.static<string[]>(), []),
+        addItem: define.event(define.static<string>()),
       })(),
       fn: ({ items, addItem }) => {
         sample({
           clock: addItem,
           source: items,
-          fn: (list, item) => [...list, item],
+          fn: (list: string[], item: string) => [...list, item],
           target: items,
         });
         return { items, addItem };
@@ -1428,7 +1441,7 @@ describe("internal reactive chains — triggered inside model, observed outside 
     await allSettled(trigger, { scope, params: "apple" });
     await allSettled(trigger, { scope, params: "banana" });
 
-    expect(scope.getState(m.$instances)["list1"].items).toEqual([
+    expect(scope.getState(m.$instances)["list1"]?.items).toEqual([
       "apple",
       "banana",
     ]);
@@ -1442,14 +1455,14 @@ describe("internal reactive chains — triggered inside model, observed outside 
 
     const m = model({
       contract: contract({
-        total: define.store(0),
-        increment: define.event<number>(),
+        total: define.store(define.static<number>(), 0),
+        increment: define.event(define.static<number>()),
       })(),
       fn: ({ total, increment }) => {
         sample({
           clock: increment,
           source: total,
-          fn: (t, n) => t + n,
+          fn: (t: number, n: number) => t + n,
           target: total,
         });
         sample({ clock: total, target: logFx });
@@ -1458,14 +1471,14 @@ describe("internal reactive chains — triggered inside model, observed outside 
     });
 
     const trigger = createEvent<number>();
-    sample({ clock: trigger, target: m.lens.increment.target() });
+    sample({ clock: trigger, target: m.lens.increment?.target() });
 
     m.create({ id: "counter", data: { total: 0 } });
 
     const scope = forkWith(m);
     await allSettled(trigger, { scope, params: 5 });
 
-    expect(scope.getState(m.$instances)["counter"].total).toBe(5);
+    expect(scope.getState(m.$instances)["counter"]?.total).toBe(5);
     // logFx handler ran during the internal chain
     expect(sideEffects.length).toBeGreaterThan(0);
   });
@@ -1483,9 +1496,9 @@ describe("internal reactive chains — triggered inside model, observed outside 
     await allSettled(trigger, { scope, params: 5 });
 
     const instances = scope.getState(m.$instances);
-    expect(instances["a"].total).toBe(15);
-    expect(instances["b"].total).toBe(25);
-    expect(instances["c"].total).toBe(35);
+    expect(instances["a"]?.total).toBe(15);
+    expect(instances["b"]?.total).toBe(25);
+    expect(instances["c"]?.total).toBe(35);
   });
 
   test("where-filtered trigger: only matching instances update", async () => {
@@ -1504,9 +1517,9 @@ describe("internal reactive chains — triggered inside model, observed outside 
     await allSettled(trigger, { scope, params: 42 });
 
     const inst = scope.getState(m.$instances);
-    expect(inst["a1"].value).toBe(0);
-    expect(inst["b1"].value).toBe(42);
-    expect(inst["b2"].value).toBe(42);
+    expect(inst["a1"]?.value).toBe(0);
+    expect(inst["b1"]?.value).toBe(42);
+    expect(inst["b2"]?.value).toBe(42);
   });
 
   test("first()-filtered trigger: only first instance updated", async () => {
@@ -1524,7 +1537,7 @@ describe("internal reactive chains — triggered inside model, observed outside 
     const inst = scope.getState(m.$instances);
     const updated = Object.entries(inst).filter(([, v]) => v.count === 11);
     expect(updated).toHaveLength(1);
-    expect(updated[0][0]).toBe("x");
+    expect(updated[0]?.[0]).toBe("x");
   });
 
   test("last()-filtered trigger: only last instance updated", async () => {
@@ -1542,7 +1555,7 @@ describe("internal reactive chains — triggered inside model, observed outside 
     const inst = scope.getState(m.$instances);
     const updated = Object.entries(inst).filter(([, v]) => v.count === 22);
     expect(updated).toHaveLength(1);
-    expect(updated[0][0]).toBe("z");
+    expect(updated[0]?.[0]).toBe("z");
   });
 
   test("fn-mapped sample: payload transformed before reaching lens store", async () => {
@@ -1560,7 +1573,7 @@ describe("internal reactive chains — triggered inside model, observed outside 
     const scope = forkWith(m);
     await allSettled(trigger, { scope, params: { raw: 3 } });
 
-    expect(scope.getState(m.$instances)["t"].count).toBe(30);
+    expect(scope.getState(m.$instances)["t"]?.count).toBe(30);
   });
 
   test("where + first chained: only first matching instance updated", async () => {
@@ -1582,8 +1595,8 @@ describe("internal reactive chains — triggered inside model, observed outside 
     await allSettled(trigger, { scope, params: 999 });
 
     const inst = scope.getState(m.$instances);
-    expect(inst["a1"].value).toBe(999);
-    expect(inst["a2"].value).toBe(0);
-    expect(inst["b1"].value).toBe(0);
+    expect(inst["a1"]?.value).toBe(999);
+    expect(inst["a2"]?.value).toBe(0);
+    expect(inst["b1"]?.value).toBe(0);
   });
 });

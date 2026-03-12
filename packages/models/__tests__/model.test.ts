@@ -11,53 +11,59 @@ import { isModel } from "../lib/models/utils";
 
 describe("define.store", () => {
   test("creates a store element with correct type and default", () => {
-    const elem = define.store(42);
-    expect(elem["~type"]).toBe("store");
+    const elem = define.store(define.static<number>(), 42);
+    expect(elem["~kind"]).toBe("store");
     expect(elem.defaultValue).toBe(42);
   });
 
   test("preserves complex default values", () => {
     const defaultObj = { x: 1, y: 2 };
-    const elem = define.store(defaultObj);
+    const elem = define.store(define.static<object>(), defaultObj);
     expect(elem.defaultValue).toBe(defaultObj);
   });
 
   test("supports null as default", () => {
-    const elem = define.store<string | null>(null);
+    const elem = define.store(define.static<string | null>(), null);
     expect(elem.defaultValue).toBeNull();
   });
 });
 
 describe("define.event", () => {
   test("creates an event element with correct type", () => {
-    const elem = define.event<string>();
-    expect(elem["~type"]).toBe("event");
+    const elem = define.event(define.static<string>());
+    expect(elem["~kind"]).toBe("event");
   });
 
   test("creates void event element", () => {
-    const elem = define.event<void>();
-    expect(elem["~type"]).toBe("event");
+    const elem = define.event(define.static<void>());
+    expect(elem["~kind"]).toBe("event");
   });
 });
 
 describe("define.child", () => {
   test("creates a child element wrapping a model", () => {
     const innerModel = model({
-      contract: contract({ val: define.store(0) })(),
+      contract: contract({ val: define.store(define.static<number>(), 0) })(),
       fn: ({ val }) => ({ val }),
     });
     const elem = define.child(innerModel);
-    expect(elem["~type"]).toBe("child");
+    expect(elem["~kind"]).toBe("child");
     expect(elem.model).toBe(innerModel);
   });
 });
 
 describe("define.ref", () => {
   test("creates a ref element wrapping a contract", () => {
-    const c = contract({ x: define.store(0) })();
-    const elem = define.ref(c);
-    expect(elem["~type"]).toBe("ref");
-    expect(elem.contract).toBe(c);
+    const c = contract({ x: define.store(define.static<number>(), 0) })();
+    const m = model({
+      contract: c,
+      fn: ({ x }) => ({ x }),
+    });
+
+    const elem = define.ref(m);
+
+    expect(elem["~kind"]).toBe("ref");
+    expect(elem.model).toBe(m);
   });
 });
 
@@ -67,24 +73,24 @@ describe("define.ref", () => {
 
 describe("contract", () => {
   test("returns a factory function", () => {
-    const factory = contract({ x: define.store(0) });
+    const factory = contract({ x: define.store(define.static<number>(), 0) });
     expect(typeof factory).toBe("function");
   });
 
   test("calling factory returns a contract with correct shape", () => {
     const c = contract({
-      name: define.store(""),
-      age: define.store(0),
-      updated: define.event<void>(),
+      name: define.store(define.static<string>(), ""),
+      age: define.store(define.static<number>(), 0),
+      updated: define.event(define.static<void>()),
     })();
-    expect(c["~type"]).toBe("contract");
-    expect(c.shape.name["~type"]).toBe("store");
-    expect(c.shape.age["~type"]).toBe("store");
-    expect(c.shape.updated["~type"]).toBe("event");
+    expect(c["~kind"]).toBe("contract");
+    expect(c.shape.name["~kind"]).toBe("store");
+    expect(c.shape.age["~kind"]).toBe("store");
+    expect(c.shape.updated["~kind"]).toBe("event");
   });
 
   test("different calls to the factory return independent contracts", () => {
-    const factory = contract({ x: define.store(0) });
+    const factory = contract({ x: define.store(define.static<number>(), 0) });
     const c1 = factory();
     const c2 = factory();
     expect(c1).not.toBe(c2);
@@ -98,7 +104,7 @@ describe("contract", () => {
 describe("isModel", () => {
   test("returns true for a model", () => {
     const m = model({
-      contract: contract({ x: define.store(0) })(),
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
     expect(isModel(m)).toBe(true);
@@ -140,10 +146,10 @@ describe("isModel", () => {
 describe("model structure", () => {
   test("model has expected fields", () => {
     const m = model({
-      contract: contract({ x: define.store(0) })(),
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
-    expect(m["~type"]).toBe("model");
+    expect(m["~kind"]).toBe("model");
     expect(typeof m["~id"]).toBe("string");
     expect(m["~contract"]).toBeDefined();
     expect(m["~fn"]).toBeTypeOf("function");
@@ -154,7 +160,7 @@ describe("model structure", () => {
 
   test("$instances starts empty", () => {
     const m = model({
-      contract: contract({ x: define.store(0) })(),
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
     expect(m.$instances.getState()).toEqual({});
@@ -163,9 +169,9 @@ describe("model structure", () => {
   test("model api contains stores and events returned from fn", () => {
     const m = model({
       contract: contract({
-        count: define.store(0),
-        increment: define.event<void>(),
-        label: define.store("hello"),
+        count: define.store(define.static<number>(), 0),
+        increment: define.event(define.static<void>()),
+        label: define.store(define.static<string>(), "hello"),
       })(),
       fn: ({ count, increment, label }) => ({ count, increment, label }),
     });
@@ -177,9 +183,9 @@ describe("model structure", () => {
   test("model api can return a subset of elements", () => {
     const m = model({
       contract: contract({
-        a: define.store(0),
-        b: define.store(0),
-        c: define.event<void>(),
+        a: define.store(define.static<number>(), 0),
+        b: define.store(define.static<number>(), 0),
+        c: define.event(define.static<void>()),
       })(),
       fn: ({ a }) => ({ a }), // only expose 'a'
     });
@@ -189,7 +195,7 @@ describe("model structure", () => {
   });
 
   test("two models with same contract are independent", () => {
-    const c = contract({ val: define.store(0) })();
+    const c = contract({ val: define.store(define.static<number>(), 0) })();
     const m1 = model({ contract: c, fn: ({ val }) => ({ val }) });
     const m2 = model({ contract: c, fn: ({ val }) => ({ val }) });
 
@@ -208,7 +214,7 @@ describe("model structure", () => {
 describe("instance creation", () => {
   test("create adds instance to $instances", () => {
     const m = model({
-      contract: contract({ name: define.store("") })(),
+      contract: contract({ name: define.store(define.static<string>(), "") })(),
       fn: ({ name }) => ({ name }),
     });
 
@@ -222,9 +228,9 @@ describe("instance creation", () => {
   test("create with multiple string/number fields", () => {
     const m = model({
       contract: contract({
-        name: define.store(""),
-        age: define.store(0),
-        score: define.store(0),
+        name: define.store(define.static<string>(), ""),
+        age: define.store(define.static<number>(), 0),
+        score: define.store(define.static<number>(), 0),
       })(),
       fn: ({ name, age, score }) => ({ name, age, score }),
     });
@@ -240,7 +246,7 @@ describe("instance creation", () => {
 
   test("multiple instances are stored independently", () => {
     const m = model({
-      contract: contract({ value: define.store(0) })(),
+      contract: contract({ value: define.store(define.static<number>(), 0) })(),
       fn: ({ value }) => ({ value }),
     });
 
@@ -257,7 +263,7 @@ describe("instance creation", () => {
 
   test("creating instance with same id overwrites previous data", () => {
     const m = model({
-      contract: contract({ value: define.store(0) })(),
+      contract: contract({ value: define.store(define.static<number>(), 0) })(),
       fn: ({ value }) => ({ value }),
     });
 
@@ -271,7 +277,7 @@ describe("instance creation", () => {
 
   test("creates many instances in sequence", () => {
     const m = model({
-      contract: contract({ index: define.store(0) })(),
+      contract: contract({ index: define.store(define.static<number>(), 0) })(),
       fn: ({ index }) => ({ index }),
     });
 
@@ -290,7 +296,7 @@ describe("instance creation", () => {
 
   test("instance creation via fork does not affect global $instances", async () => {
     const m = model({
-      contract: contract({ x: define.store(0) })(),
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
 
@@ -311,7 +317,9 @@ describe("instance creation", () => {
 
   test("two forks with same model are independent", async () => {
     const m = model({
-      contract: contract({ label: define.store("") })(),
+      contract: contract({
+        label: define.store(define.static<string>(), ""),
+      })(),
       fn: ({ label }) => ({ label }),
     });
 
@@ -338,7 +346,7 @@ describe("instance creation", () => {
 
   test("multiple instances in same fork scope", async () => {
     const m = model({
-      contract: contract({ n: define.store(0) })(),
+      contract: contract({ n: define.store(define.static<number>(), 0) })(),
       fn: ({ n }) => ({ n }),
     });
 

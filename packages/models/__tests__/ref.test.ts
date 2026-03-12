@@ -14,8 +14,8 @@ const tick = () => new Promise<void>((r) => setTimeout(r, 10));
 function makeItemModel() {
   return model({
     contract: contract({
-      label: define.store(""),
-      active: define.store(false),
+      label: define.store(define.static<string>(), ""),
+      active: define.store(define.static<boolean>(), false),
     })(),
     fn: ({ label, active }) => ({ label, active }),
   });
@@ -29,7 +29,7 @@ describe("ref() structure", () => {
   test("returns an object with ~type 'ref'", () => {
     const m = makeItemModel();
     const r = ref(m);
-    expect(r["~type"]).toBe("ref");
+    expect(r["~kind"]).toBe("ref");
   });
 
   test("returned ref has a lens property", () => {
@@ -109,7 +109,7 @@ describe("ref lens API", () => {
     await tick();
 
     // Instance should not be updated since ref has no ids
-    expect(m.$instances.getState()["1"].label).toBe("original");
+    expect(m.$instances.getState()["1"]?.label).toBe("original");
   });
 });
 
@@ -124,8 +124,8 @@ describe("ref used inside a model's fn", () => {
     // A parent model that holds a ref to targetModel
     const parentModel = model({
       contract: contract({
-        refIds: define.store<string[]>([]),
-        setRef: define.event<string[]>(),
+        refIds: define.store(define.static<string[]>(), []),
+        setRef: define.event(define.static<string[]>()),
       })(),
       fn: ({ refIds, setRef }) => {
         const r = ref(targetModel);
@@ -142,7 +142,7 @@ describe("ref used inside a model's fn", () => {
       },
     });
 
-    parentModel.create({ id: "p1", data: { refIds: [], setRef: [] as any } });
+    parentModel.create({ id: "p1", data: { refIds: [] } });
 
     // Verify parent model was created successfully
     expect(parentModel.$instances.getState()["p1"]).toBeDefined();
@@ -155,15 +155,15 @@ describe("ref used inside a model's fn", () => {
     expect(() => {
       model({
         contract: contract({
-          x: define.store(0),
+          x: define.store(define.static<number>(), 0),
         })(),
         fn: ({ x }) => {
           const refA = ref(modelA);
           const refB = ref(modelB);
 
           // Just creating refs shouldn't throw
-          expect(refA["~type"]).toBe("ref");
-          expect(refB["~type"]).toBe("ref");
+          expect(refA["~kind"]).toBe("ref");
+          expect(refB["~kind"]).toBe("ref");
 
           return { x };
         },

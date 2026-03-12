@@ -19,7 +19,14 @@
  *        are visible via scope.getState() and serialize().
  */
 import { describe, test, expect } from "vitest";
-import { sample, createEvent, fork, allSettled, serialize } from "effector";
+import {
+  sample,
+  createEvent,
+  fork,
+  allSettled,
+  serialize,
+  type StoreWritable,
+} from "effector";
 import { model } from "../lib/models";
 import { contract } from "../lib/contracts";
 import { define } from "../lib/define";
@@ -31,9 +38,9 @@ import { define } from "../lib/define";
 function makeUserModel() {
   return model({
     contract: contract({
-      name: define.store(""),
-      age: define.store(0),
-      active: define.store(false),
+      name: define.store(define.static<string>(), ""),
+      age: define.store(define.static<number>(), 0),
+      active: define.store(define.static<boolean>(), false),
     })(),
     fn: ({ name, age, active }) => ({ name, age, active }),
   });
@@ -41,7 +48,7 @@ function makeUserModel() {
 
 function makeCounterModel() {
   return model({
-    contract: contract({ count: define.store(0) })(),
+    contract: contract({ count: define.store(define.static<number>(), 0) })(),
     fn: ({ count }) => ({ count }),
   });
 }
@@ -89,15 +96,24 @@ describe("instance creation inside scope (Pattern A)", () => {
     const m = makeCounterModel();
 
     const scope = fork();
-    await allSettled(m.create, { scope, params: { id: "1", data: { count: 10 } } });
-    await allSettled(m.create, { scope, params: { id: "2", data: { count: 20 } } });
-    await allSettled(m.create, { scope, params: { id: "3", data: { count: 30 } } });
+    await allSettled(m.create, {
+      scope,
+      params: { id: "1", data: { count: 10 } },
+    });
+    await allSettled(m.create, {
+      scope,
+      params: { id: "2", data: { count: 20 } },
+    });
+    await allSettled(m.create, {
+      scope,
+      params: { id: "3", data: { count: 30 } },
+    });
 
     const instances = scope.getState(m.$instances);
     expect(Object.keys(instances)).toHaveLength(3);
-    expect(instances["1"].count).toBe(10);
-    expect(instances["2"].count).toBe(20);
-    expect(instances["3"].count).toBe(30);
+    expect(instances["1"]?.count).toBe(10);
+    expect(instances["2"]?.count).toBe(20);
+    expect(instances["3"]?.count).toBe(30);
   });
 });
 
@@ -113,10 +129,12 @@ describe("lens mutations in scope (Pattern B)", () => {
 
     m.create({ id: "x", data: { count: 0 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(trigger, { scope, params: 42 });
 
-    expect(scope.getState(m.$instances)["x"].count).toBe(42);
+    expect(scope.getState(m.$instances)["x"]?.count).toBe(42);
   });
 
   test("mutation in one scope does not affect a freshly forked second scope", async () => {
@@ -126,11 +144,13 @@ describe("lens mutations in scope (Pattern B)", () => {
 
     m.create({ id: "shared", data: { count: 0 } });
 
-    const scope1 = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope1 = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
 
     await allSettled(trigger, { scope: scope1, params: 100 });
 
-    expect(scope1.getState(m.$instances)["shared"].count).toBe(100);
+    expect(scope1.getState(m.$instances)["shared"]?.count).toBe(100);
     // Original global store is at 100 too (in-place mutation),
     // but a NEW fork starts from the INITIAL value {}
     const scope2 = fork();
@@ -140,8 +160,8 @@ describe("lens mutations in scope (Pattern B)", () => {
   test("where filter in scope only updates matching instances", async () => {
     const m = model({
       contract: contract({
-        type: define.store<"active" | "inactive">("active"),
-        score: define.store(0),
+        type: define.store(define.static<"active" | "inactive">(), "active"),
+        score: define.store(define.static<number>(), 0),
       })(),
       fn: ({ type, score }) => ({ type, score }),
     });
@@ -156,13 +176,15 @@ describe("lens mutations in scope (Pattern B)", () => {
     m.create({ id: "a2", data: { type: "active", score: 0 } });
     m.create({ id: "i1", data: { type: "inactive", score: 0 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(trigger, { scope, params: 10 });
 
     const instances = scope.getState(m.$instances);
-    expect(instances["a1"].score).toBe(10);
-    expect(instances["a2"].score).toBe(10);
-    expect(instances["i1"].score).toBe(0);
+    expect(instances["a1"]?.score).toBe(10);
+    expect(instances["a2"]?.score).toBe(10);
+    expect(instances["i1"]?.score).toBe(0);
   });
 
   test("first() in scope updates only first instance", async () => {
@@ -174,13 +196,15 @@ describe("lens mutations in scope (Pattern B)", () => {
     m.create({ id: "b", data: { count: 0 } });
     m.create({ id: "c", data: { count: 0 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(trigger, { scope, params: 77 });
 
     const instances = scope.getState(m.$instances);
     const updated = Object.entries(instances).filter(([, v]) => v.count === 77);
     expect(updated).toHaveLength(1);
-    expect(updated[0][0]).toBe("a");
+    expect(updated[0]?.[0]).toBe("a");
   });
 
   test("last() in scope updates only last instance", async () => {
@@ -192,13 +216,15 @@ describe("lens mutations in scope (Pattern B)", () => {
     m.create({ id: "b", data: { count: 0 } });
     m.create({ id: "c", data: { count: 0 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(trigger, { scope, params: 88 });
 
     const instances = scope.getState(m.$instances);
     const updated = Object.entries(instances).filter(([, v]) => v.count === 88);
     expect(updated).toHaveLength(1);
-    expect(updated[0][0]).toBe("c");
+    expect(updated[0]?.[0]).toBe("c");
   });
 });
 
@@ -209,7 +235,7 @@ describe("lens mutations in scope (Pattern B)", () => {
 describe("serialize(scope) — $instances snapshots", () => {
   test("empty scope serializes $instances as empty object", () => {
     const m = makeCounterModel();
-    const scope = fork({ values: [[m.$instances, {}]] });
+    const scope = fork({ values: [[m.$instances as StoreWritable<any>, {}]] });
     const snap = serialize(scope);
     const sid = (m.$instances as any).sid as string;
     expect(snap[sid]).toEqual({});
@@ -219,8 +245,14 @@ describe("serialize(scope) — $instances snapshots", () => {
     const m = makeCounterModel();
 
     const scope = fork();
-    await allSettled(m.create, { scope, params: { id: "1", data: { count: 5 } } });
-    await allSettled(m.create, { scope, params: { id: "2", data: { count: 10 } } });
+    await allSettled(m.create, {
+      scope,
+      params: { id: "1", data: { count: 5 } },
+    });
+    await allSettled(m.create, {
+      scope,
+      params: { id: "2", data: { count: 10 } },
+    });
 
     const snap = serialize(scope);
     const sid = (m.$instances as any).sid as string;
@@ -239,7 +271,9 @@ describe("serialize(scope) — $instances snapshots", () => {
     m.create({ id: "a", data: { count: 0 } });
     m.create({ id: "b", data: { count: 0 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(trigger, { scope, params: 42 });
 
     const snap = serialize(scope);
@@ -255,7 +289,9 @@ describe("serialize(scope) — $instances snapshots", () => {
     const m = makeCounterModel();
     m.create({ id: "1", data: { count: 5 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     const snap = serialize(scope);
 
     // The virtual API stores have serialize:"ignore" — must NOT appear.
@@ -281,7 +317,10 @@ describe("serialize(scope) — $instances snapshots", () => {
     const scope1 = fork();
     const scope2 = fork();
 
-    await allSettled(m1.create, { scope: scope1, params: { id: "c1", data: { count: 1 } } });
+    await allSettled(m1.create, {
+      scope: scope1,
+      params: { id: "c1", data: { count: 1 } },
+    });
     await allSettled(m2.create, {
       scope: scope2,
       params: { id: "u1", data: { name: "Alice", age: 30, active: true } },
@@ -304,8 +343,14 @@ describe("serialize(scope) — $instances snapshots", () => {
     const scope1 = fork();
     const scope2 = fork();
 
-    await allSettled(m.create, { scope: scope1, params: { id: "1", data: { count: 10 } } });
-    await allSettled(m.create, { scope: scope2, params: { id: "1", data: { count: 20 } } });
+    await allSettled(m.create, {
+      scope: scope1,
+      params: { id: "1", data: { count: 10 } },
+    });
+    await allSettled(m.create, {
+      scope: scope2,
+      params: { id: "1", data: { count: 20 } },
+    });
 
     const snap1 = serialize(scope1);
     const snap2 = serialize(scope2);
@@ -318,8 +363,8 @@ describe("serialize(scope) — $instances snapshots", () => {
   test("where-filtered lens mutation produces correct serialized output", async () => {
     const m = model({
       contract: contract({
-        role: define.store<"admin" | "user">("user"),
-        points: define.store(0),
+        role: define.store(define.static<"admin" | "user">(), "user"),
+        points: define.store(define.static<number>(), 0),
       })(),
       fn: ({ role, points }) => ({ role, points }),
     });
@@ -334,7 +379,9 @@ describe("serialize(scope) — $instances snapshots", () => {
     m.create({ id: "admin2", data: { role: "admin", points: 0 } });
     m.create({ id: "user1", data: { role: "user", points: 0 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(grantToAdmins, { scope, params: 100 });
 
     const snap = serialize(scope);
@@ -367,7 +414,9 @@ describe("complex fork scenarios", () => {
     m.create({ id: "1", data: { count: 0 } });
     m.create({ id: "2", data: { count: 5 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
 
     // Set all counts to 1
     await allSettled(setToOne, { scope });
@@ -388,12 +437,14 @@ describe("complex fork scenarios", () => {
 
     m.create({ id: "1", data: { count: 0 } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(trigger, { scope, params: 10 });
     await allSettled(trigger, { scope, params: 20 });
     await allSettled(trigger, { scope, params: 30 });
 
-    expect(scope.getState(m.$instances)["1"].count).toBe(30);
+    expect(scope.getState(m.$instances)["1"]?.count).toBe(30);
 
     const sid = (m.$instances as any).sid as string;
     expect(serialize(scope)[sid]).toMatchObject({ "1": { count: 30 } });
@@ -421,8 +472,8 @@ describe("complex fork scenarios", () => {
   test("chained where+first mutation reflected in serialize", async () => {
     const m = model({
       contract: contract({
-        priority: define.store(0),
-        processed: define.store(false),
+        priority: define.store(define.static<number>(), 0),
+        processed: define.store(define.static<boolean>(), false),
       })(),
       fn: ({ priority, processed }) => ({ priority, processed }),
     });
@@ -440,7 +491,9 @@ describe("complex fork scenarios", () => {
     m.create({ id: "high1", data: { priority: 10, processed: false } });
     m.create({ id: "high2", data: { priority: 8, processed: false } });
 
-    const scope = fork({ values: [[m.$instances, m.$instances.getState()]] });
+    const scope = fork({
+      values: [[m.$instances as StoreWritable<any>, m.$instances.getState()]],
+    });
     await allSettled(processHighest, { scope, params: true });
 
     const sid = (m.$instances as any).sid as string;
@@ -456,8 +509,14 @@ describe("complex fork scenarios", () => {
 
     // Simulate server: create instances in scope and serialize
     const serverScope = fork();
-    await allSettled(m.create, { scope: serverScope, params: { id: "s1", data: { count: 42 } } });
-    await allSettled(m.create, { scope: serverScope, params: { id: "s2", data: { count: 99 } } });
+    await allSettled(m.create, {
+      scope: serverScope,
+      params: { id: "s1", data: { count: 42 } },
+    });
+    await allSettled(m.create, {
+      scope: serverScope,
+      params: { id: "s2", data: { count: 99 } },
+    });
     const serverSnap = serialize(serverScope);
 
     // Simulate client: restore from serialized data

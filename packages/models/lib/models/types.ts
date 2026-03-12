@@ -3,18 +3,17 @@ import type {
   Event,
   EventCallable,
   Store,
-  StoreValue,
   StoreWritable,
 } from "effector";
-import type {
-  ChildElement,
-  Contract,
-  EventElement,
-  RefElement,
-  ShapeElement,
-  StoreElement,
+import {
+  type ChildElement,
+  type Contract,
+  type EventElement,
+  type RefElement,
+  type ShapeElement,
+  type StoreElement,
 } from "../contracts";
-import type { Lens } from "../lens";
+import type { Lens, LensProps } from "../lens";
 
 export type Instances<T extends Contract<any>> = Record<
   string,
@@ -24,21 +23,23 @@ export type Instances<T extends Contract<any>> = Record<
 type OmitNever<T> = { [K in keyof T as T[K] extends never ? never : K]: T[K] };
 
 type ShapeElementData<T extends ShapeElement> = T extends StoreElement
-  ? T["~calculatedType"]
-  : T extends ChildElement
-    ? Record<string, ContractData<T["model"]["~contract"]>>
-    : T extends RefElement
-      ? ContractData<T["model"]["~contract"]> | null
-      : never;
+  ? T["~type"]
+  : T extends EventElement
+    ? never
+    : T extends ChildElement<infer K>
+      ? Record<string, ContractData<K["~contract"]>>
+      : T extends RefElement<infer K>
+        ? ContractData<K["~contract"]> | null
+        : never;
 
 export type ContractData<T extends Contract<any>> = OmitNever<{
   [k in keyof T["shape"]]: ShapeElementData<T["shape"][k]>;
 }>;
 
 type ShapeElementApi<T extends ShapeElement> = T extends StoreElement
-  ? StoreWritable<T["~calculatedType"]>
+  ? StoreWritable<T["~type"]>
   : T extends EventElement
-    ? EventCallable<T["~calculatedType"]>
+    ? EventCallable<T["~type"]>
     : T extends ChildElement<infer K>
       ? Record<string, ContractApi<K["~contract"]>>
       : T extends RefElement<infer K>
@@ -66,6 +67,7 @@ export type ModelApi = {
 };
 
 export interface Model<T extends Contract<any>, Api extends ModelApi> {
+  "~kind": "model";
   "~contract": T;
   "~api": Api;
   "~fn": (api: ContractApi<T>) => Api;
@@ -74,7 +76,7 @@ export interface Model<T extends Contract<any>, Api extends ModelApi> {
   $instances: Store<Record<string, BaseInstance & ContractData<T>>>;
   create: EventCallable<CreateInstancePayload<T>>;
 
-  lens: Lens<Model<T, Api>>;
+  lens: Lens<Model<T, Api>> & LensProps<Model<T, Api>>;
 }
 
 export interface BaseInstance {

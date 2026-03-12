@@ -39,7 +39,7 @@ export function ref<T extends Model<any, any>>(model: T): Ref<T> {
   });
 
   return {
-    "~type": "ref",
+    "~kind": "ref",
     lens: patchedLens,
   };
 }

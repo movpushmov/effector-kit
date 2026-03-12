@@ -4,13 +4,13 @@ import { allSettled, sample, fork, createEvent } from "effector";
 
 const userModel = model({
   contract: contract({
-    name: define.store(""),
-    age: define.store(0),
-    sex: define.store<"m" | "f" | null>(null),
+    name: define.store(define.static<string>(), ""),
+    age: define.store(define.static<number>(), 0),
+    sex: define.store(define.static<"m" | "f" | null>(), null),
 
-    nameChanged: define.event(),
-    ageChanged: define.event(),
-    sexChanged: define.event(),
+    nameChanged: define.event(define.static<string>()),
+    ageChanged: define.event(define.static<number>()),
+    sexChanged: define.event(define.static<"m" | "f" | null>()),
   })(),
   fn: ({ name, age, sex, nameChanged, ageChanged, sexChanged }) => {
     sample({

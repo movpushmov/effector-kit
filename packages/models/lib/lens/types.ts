@@ -53,8 +53,13 @@ export type Lens<
   getSource(): StoreValue<InputModel["$instances"]>;
   where(
     predicate: [Props] extends [never]
-      ? (data: ContractData<InputModel["~contract"]>) => boolean
-      : (data: ContractData<InputModel["~contract"]>, props: Props) => boolean,
+      ? (
+          data: ContractData<InputModel["~contract"]> & { id: string },
+        ) => boolean
+      : (
+          data: ContractData<InputModel["~contract"]> & { id: string },
+          props: Props,
+        ) => boolean,
   ): Lens<InputModel, Props>;
   first(): Lens<InputModel, Props>;
   last(): Lens<InputModel, Props>;

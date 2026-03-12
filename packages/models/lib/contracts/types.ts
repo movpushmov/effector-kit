@@ -1,3 +1,4 @@
+import type { HKT } from "../../hkt";
 import type { Model } from "../models";
 
 export type GenericsMap = Record<string, any>;
@@ -8,35 +9,46 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
   ? I
   : never;
 
-export interface StoreElement {
-  "~type": "store";
-  defaultValue: this["~calculatedType"];
+export type GenericsHKT = HKT.BaseHKT<"~generics">;
+export type TypeElementHKT = HKT.BaseHKT<"~typeElement">;
 
-  "~generic": GenericElement;
-  "~generics": GenericsMap;
-  "~calculatedType": this["~generics"][NonNullable<this["~generic"]["~name"]>];
+export type ExtractHKTType<Source extends StoreElement | EventElement> =
+  HKT.GetParameter<Source, TypeElementHKT> extends infer Type extends
+    TypeElement
+    ? [Type] extends [StaticElement<infer U>]
+      ? U
+      : [Type] extends [GenericElement]
+        ? HKT.GetParameter<Source, GenericsHKT> extends infer Map extends
+            GenericsMap
+          ? Map[NonNullable<Type["~name"]>]
+          : never
+        : never
+    : never;
+
+export interface StoreElement extends GenericsHKT, TypeElementHKT {
+  "~kind": "store";
+  defaultValue: this["~type"];
+  "~type": ExtractHKTType<this>;
 }
 
-export interface EventElement {
-  "~type": "event";
-  "~generic": GenericElement;
-  "~generics": GenericsMap;
-  "~calculatedType": this["~generics"][NonNullable<this["~generic"]["~name"]>];
+export interface EventElement extends GenericsHKT, TypeElementHKT {
+  "~kind": "event";
+  "~type": ExtractHKTType<this>;
 }
 
 export type ChildElement<T extends Model<any, any> = any> = {
-  "~type": "child";
+  "~kind": "child";
   model: T;
 };
 
 export type RefElement<T extends Model<any, any> = any> = {
-  "~type": "ref";
+  "~kind": "ref";
   model: T;
 };
 
-export type GenericElement = { "~type": "generic"; "~name"?: string };
-export type StaticElement<T = any> = {
-  "~type": "static";
+export type GenericElement = { "~kind": "generic"; "~name"?: string };
+export type StaticElement<T> = {
+  "~kind": "static";
   "~static"?: T;
 };
 
@@ -58,12 +70,18 @@ export interface Shape {
 
 export type ExtractGenericsFromShape<T extends Shape> = UnionToIntersection<
   {
-    [k in keyof T]: [T[k]["~generic"]] extends [StaticElement<any>]
+    [k in keyof T]: [HKT.GetParameter<T[k], TypeElementHKT>] extends [
+      StaticElement<any>,
+    ]
       ? never
-      : [T[k]["~generic"]] extends [never]
+      : [HKT.GetParameter<T[k], TypeElementHKT>] extends [never]
         ? never
-        : T[k]["~generic"] extends GenericElement
-          ? { [name in NonNullable<T[k]["~generic"]["~name"]>]: unknown }
+        : HKT.GetParameter<T[k], TypeElementHKT> extends GenericElement
+          ? {
+              [name in NonNullable<
+                HKT.GetParameter<T[k], TypeElementHKT>["~name"]
+              >]: unknown;
+            }
           : never;
   }[keyof T]
 >;
@@ -72,8 +90,8 @@ export interface Contract<
   T extends Shape,
   Generics extends ExtractGenericsFromShape<T> = ExtractGenericsFromShape<T>,
 > {
-  "~type": "contract";
+  "~kind": "contract";
   shape: {
-    [k in keyof T]: T[k] & { "~generics"?: Generics };
+    [k in keyof T]: HKT.WithParameter<T[k], GenericsHKT, Generics>;
   };
 }

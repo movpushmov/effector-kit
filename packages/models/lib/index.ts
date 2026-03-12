@@ -1,6 +1,6 @@
 export { define } from "./define";
 
-export { model } from "./models";
+export { model, isModel } from "./models";
 export { contract } from "./contracts";
 
 export { ref } from "./ref";

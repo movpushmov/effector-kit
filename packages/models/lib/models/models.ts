@@ -48,7 +48,7 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
   });
 
   const builtModel = {
-    "~type": "model",
+    "~kind": "model",
     "~contract": contract,
     "~api": modelApi,
     "~fn": fn,

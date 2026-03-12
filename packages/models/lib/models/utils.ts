@@ -7,7 +7,7 @@ export function isModel<T extends Contract<any>, U extends ModelApi>(
   return (
     typeof value === "object" &&
     value !== null &&
-    "~type" in value &&
-    value["~type"] === "model"
+    "~kind" in value &&
+    value["~kind"] === "model"
   );
 }

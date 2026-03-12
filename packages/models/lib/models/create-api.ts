@@ -15,7 +15,7 @@ function transform(
       throw new Error("Invalid item type: undefined");
     }
 
-    switch (item?.["~type"]) {
+    switch (item?.["~kind"]) {
       case "store": {
         to[key] = createStore(item.defaultValue, { serialize: "ignore" });
 

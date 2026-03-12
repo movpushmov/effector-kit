@@ -2,7 +2,7 @@ import type { Scope, StoreWritable } from "effector";
 import type { Model } from "../models";
 
 type DispatcherBaseEvent<Type extends string> = {
-  "~type": Type;
+  "~kind": Type;
   payload: any;
 };
 

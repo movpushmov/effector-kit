@@ -11,7 +11,13 @@
  *   4. Assert via scope.getState(m.$instances).
  */
 import { describe, test, expect } from "vitest";
-import { sample, createEvent, fork, allSettled } from "effector";
+import {
+  sample,
+  createEvent,
+  fork,
+  allSettled,
+  type StoreWritable,
+} from "effector";
 import { model } from "../lib/models";
 import { contract } from "../lib/contracts";
 import { define } from "../lib/define";
@@ -22,7 +28,7 @@ import { define } from "../lib/define";
 
 function makeCounter() {
   return model({
-    contract: contract({ count: define.store(0) })(),
+    contract: contract({ count: define.store(define.static<number>(), 0) })(),
     fn: ({ count }) => ({ count }),
   });
 }
@@ -30,8 +36,8 @@ function makeCounter() {
 function makeTagged() {
   return model({
     contract: contract({
-      tag: define.store<"a" | "b">("a"),
-      value: define.store(0),
+      tag: define.store(define.static<"a" | "b">(), "a"),
+      value: define.store(define.static<number>(), 0),
     })(),
     fn: ({ tag, value }) => ({ tag, value }),
   });
@@ -84,9 +90,9 @@ describe("lens store target() via scope", () => {
     await allSettled(trigger, { scope, params: 42 });
 
     const instances = scope.getState(m.$instances);
-    expect(instances["a"].count).toBe(42);
-    expect(instances["b"].count).toBe(42);
-    expect(instances["c"].count).toBe(42);
+    expect(instances["a"]?.count).toBe(42);
+    expect(instances["b"]?.count).toBe(42);
+    expect(instances["c"]?.count).toBe(42);
   });
 
   test("update does NOT affect instances of a DIFFERENT model", async () => {
@@ -100,14 +106,14 @@ describe("lens store target() via scope", () => {
 
     const scope = fork({
       values: [
-        [m1.$instances, m1.$instances.getState()],
-        [m2.$instances, m2.$instances.getState()],
+        [m1.$instances as StoreWritable<any>, m1.$instances.getState()],
+        [m2.$instances as StoreWritable<any>, m2.$instances.getState()],
       ],
     });
     await allSettled(trigger1, { scope, params: 99 });
 
-    expect(scope.getState(m1.$instances)["1"].count).toBe(99);
-    expect(scope.getState(m2.$instances)["1"].count).toBe(0);
+    expect(scope.getState(m1.$instances)["1"]?.count).toBe(99);
+    expect(scope.getState(m2.$instances)["1"]?.count).toBe(0);
   });
 
   test("target called multiple times accumulates correctly", async () => {
@@ -119,10 +125,10 @@ describe("lens store target() via scope", () => {
 
     const scope = forkWithInstances(m);
     await allSettled(trigger, { scope, params: 10 });
-    expect(scope.getState(m.$instances)["a"].count).toBe(10);
+    expect(scope.getState(m.$instances)["a"]?.count).toBe(10);
 
     await allSettled(trigger, { scope, params: 20 });
-    expect(scope.getState(m.$instances)["a"].count).toBe(20);
+    expect(scope.getState(m.$instances)["a"]?.count).toBe(20);
   });
 
   test("target on non-existent instances is a no-op", async () => {
@@ -130,7 +136,7 @@ describe("lens store target() via scope", () => {
     const trigger = createEvent<number>();
     sample({ clock: trigger, target: m.lens.count.target() });
 
-    const scope = fork({ values: [[m.$instances, {}]] });
+    const scope = fork({ values: [[m.$instances as StoreWritable<any>, {}]] });
     await allSettled(trigger, { scope, params: 999 });
 
     expect(scope.getState(m.$instances)).toEqual({});
@@ -158,9 +164,9 @@ describe("lens.where() filtering via scope", () => {
     await allSettled(trigger, { scope, params: 100 });
 
     const instances = scope.getState(m.$instances);
-    expect(instances["1"].value).toBe(100);
-    expect(instances["2"].value).toBe(0);
-    expect(instances["3"].value).toBe(100);
+    expect(instances["1"]?.value).toBe(100);
+    expect(instances["2"]?.value).toBe(0);
+    expect(instances["3"]?.value).toBe(100);
   });
 
   test("predicate matching no instances is a no-op", async () => {
@@ -176,7 +182,7 @@ describe("lens.where() filtering via scope", () => {
     const scope = forkWithInstances(m);
     await allSettled(trigger, { scope, params: 555 });
 
-    expect(scope.getState(m.$instances)["1"].value).toBe(0);
+    expect(scope.getState(m.$instances)["1"]?.value).toBe(0);
   });
 
   test("predicate matching all instances updates all", async () => {
@@ -194,8 +200,8 @@ describe("lens.where() filtering via scope", () => {
     await allSettled(trigger, { scope, params: 77 });
 
     const instances = scope.getState(m.$instances);
-    expect(instances["1"].value).toBe(77);
-    expect(instances["2"].value).toBe(77);
+    expect(instances["1"]?.value).toBe(77);
+    expect(instances["2"]?.value).toBe(77);
   });
 });
 
@@ -230,7 +236,7 @@ describe("lens.first() via scope", () => {
     const trigger = createEvent<number>();
     sample({ clock: trigger, target: m.lens.first().count.target() });
 
-    const scope = fork({ values: [[m.$instances, {}]] });
+    const scope = fork({ values: [[m.$instances as StoreWritable<any>, {}]] });
     await allSettled(trigger, { scope, params: 99 });
 
     expect(scope.getState(m.$instances)).toEqual({});
@@ -246,7 +252,7 @@ describe("lens.first() via scope", () => {
     const scope = forkWithInstances(m);
     await allSettled(trigger, { scope, params: 7 });
 
-    expect(scope.getState(m.$instances)["only"].count).toBe(7);
+    expect(scope.getState(m.$instances)["only"]?.count).toBe(7);
   });
 });
 
@@ -288,8 +294,8 @@ describe("lens.last() via scope", () => {
     await allSettled(t1, { scope: scope1, params: 50 });
     await allSettled(t2, { scope: scope2, params: 50 });
 
-    expect(scope1.getState(m1.$instances)["solo"].count).toBe(50);
-    expect(scope2.getState(m2.$instances)["solo"].count).toBe(50);
+    expect(scope1.getState(m1.$instances)["solo"]?.count).toBe(50);
+    expect(scope2.getState(m2.$instances)["solo"]?.count).toBe(50);
   });
 });
 
@@ -301,8 +307,8 @@ describe("lens event target() via scope", () => {
   test("fires an event inside instance context so sample in fn runs", async () => {
     const m = model({
       contract: contract({
-        total: define.store(0),
-        add: define.event<number>(),
+        total: define.store(define.static<number>(), 0),
+        add: define.event(define.static<number>()),
       })(),
       fn: ({ total, add }) => {
         sample({
@@ -324,16 +330,16 @@ describe("lens event target() via scope", () => {
     const scope = forkWithInstances(m);
     await allSettled(trigger, { scope, params: 5 });
 
-    expect(scope.getState(m.$instances)["e1"].total).toBe(15);
-    expect(scope.getState(m.$instances)["e2"].total).toBe(25);
+    expect(scope.getState(m.$instances)["e1"]?.total).toBe(15);
+    expect(scope.getState(m.$instances)["e2"]?.total).toBe(25);
   });
 
   test("fires event only in filtered instances", async () => {
     const m = model({
       contract: contract({
-        active: define.store(false),
-        score: define.store(0),
-        grant: define.event<number>(),
+        active: define.store(define.static<boolean>(), false),
+        score: define.store(define.static<number>(), 0),
+        grant: define.event(define.static<number>()),
       })(),
       fn: ({ active, score, grant }) => {
         sample({
@@ -358,8 +364,8 @@ describe("lens event target() via scope", () => {
     const scope = forkWithInstances(m);
     await allSettled(trigger, { scope, params: 10 });
 
-    expect(scope.getState(m.$instances)["active"].score).toBe(10);
-    expect(scope.getState(m.$instances)["inactive"].score).toBe(0);
+    expect(scope.getState(m.$instances)["active"]?.score).toBe(10);
+    expect(scope.getState(m.$instances)["inactive"]?.score).toBe(0);
   });
 });
 
@@ -383,15 +389,15 @@ describe("lens parallel operations on many instances via scope", () => {
 
     const instances = scope.getState(m.$instances);
     for (let i = 0; i < COUNT; i++) {
-      expect(instances[String(i)].count).toBe(0);
+      expect(instances[String(i)]?.count).toBe(0);
     }
   });
 
   test("where filter with 100 instances updates only matching half", async () => {
     const m = model({
       contract: contract({
-        even: define.store(false),
-        value: define.store(0),
+        even: define.store(define.static<boolean>(), false),
+        value: define.store(define.static<number>(), 0),
       })(),
       fn: ({ even, value }) => ({ even, value }),
     });
@@ -413,9 +419,9 @@ describe("lens parallel operations on many instances via scope", () => {
     const instances = scope.getState(m.$instances);
     for (let i = 0; i < COUNT; i++) {
       if (i % 2 === 0) {
-        expect(instances[String(i)].value).toBe(1);
+        expect(instances[String(i)]?.value).toBe(1);
       } else {
-        expect(instances[String(i)].value).toBe(0);
+        expect(instances[String(i)]?.value).toBe(0);
       }
     }
   });
@@ -441,17 +447,17 @@ describe("lens parallel operations on many instances via scope", () => {
 
     const scope = fork({
       values: [
-        [m1.$instances, m1.$instances.getState()],
-        [m2.$instances, m2.$instances.getState()],
+        [m1.$instances as StoreWritable<any>, m1.$instances.getState()],
+        [m2.$instances as StoreWritable<any>, m2.$instances.getState()],
       ],
     });
     await allSettled(triggerA, { scope, params: 10 });
     await allSettled(triggerB, { scope, params: 20 });
 
-    expect(scope.getState(m1.$instances)["1"].value).toBe(10);
-    expect(scope.getState(m1.$instances)["2"].value).toBe(0);
-    expect(scope.getState(m2.$instances)["1"].value).toBe(0);
-    expect(scope.getState(m2.$instances)["2"].value).toBe(20);
+    expect(scope.getState(m1.$instances)["1"]?.value).toBe(10);
+    expect(scope.getState(m1.$instances)["2"]?.value).toBe(0);
+    expect(scope.getState(m2.$instances)["1"]?.value).toBe(0);
+    expect(scope.getState(m2.$instances)["2"]?.value).toBe(20);
   });
 });
 
@@ -465,7 +471,10 @@ describe("lens chaining via scope", () => {
     const trigger = createEvent<number>();
     sample({
       clock: trigger,
-      target: m.lens.where(({ tag }) => tag === "a").first().value.target(),
+      target: m.lens
+        .where(({ tag }) => tag === "a")
+        .first()
+        .value.target(),
     });
 
     m.create({ id: "1", data: { tag: "a", value: 0 } });
@@ -476,11 +485,13 @@ describe("lens chaining via scope", () => {
     await allSettled(trigger, { scope, params: 999 });
 
     const instances = scope.getState(m.$instances);
-    const updated = Object.entries(instances).filter(([, v]) => v.value === 999);
+    const updated = Object.entries(instances).filter(
+      ([, v]) => v.value === 999,
+    );
     expect(updated).toHaveLength(1);
-    expect(updated[0][0]).toBe("1");
-    expect(instances["2"].value).toBe(0);
-    expect(instances["3"].value).toBe(0);
+    expect(updated[0]?.[0]).toBe("1");
+    expect(instances["2"]?.value).toBe(0);
+    expect(instances["3"]?.value).toBe(0);
   });
 
   test("where + last: only last matching instance is updated", async () => {
@@ -488,7 +499,10 @@ describe("lens chaining via scope", () => {
     const trigger = createEvent<number>();
     sample({
       clock: trigger,
-      target: m.lens.where(({ tag }) => tag === "a").last().value.target(),
+      target: m.lens
+        .where(({ tag }) => tag === "a")
+        .last()
+        .value.target(),
     });
 
     m.create({ id: "1", data: { tag: "a", value: 0 } });
@@ -499,11 +513,13 @@ describe("lens chaining via scope", () => {
     await allSettled(trigger, { scope, params: 888 });
 
     const instances = scope.getState(m.$instances);
-    const updated = Object.entries(instances).filter(([, v]) => v.value === 888);
+    const updated = Object.entries(instances).filter(
+      ([, v]) => v.value === 888,
+    );
     expect(updated).toHaveLength(1);
-    expect(updated[0][0]).toBe("2");
-    expect(instances["1"].value).toBe(0);
-    expect(instances["3"].value).toBe(0);
+    expect(updated[0]?.[0]).toBe("2");
+    expect(instances["1"]?.value).toBe(0);
+    expect(instances["3"]?.value).toBe(0);
   });
 });
 
@@ -521,7 +537,7 @@ describe("lens clock()", () => {
 
   test("clock() creates an observable on an event", () => {
     const m = model({
-      contract: contract({ clicked: define.event<void>() })(),
+      contract: contract({ clicked: define.event(define.static<void>()) })(),
       fn: ({ clicked }) => ({ clicked }),
     });
     expect(m.lens.clicked.clock()).toBeDefined();
@@ -557,15 +573,15 @@ describe("lens wired via sample", () => {
     const scope = forkWithInstances(m);
     await allSettled(trigger, { scope, params: 50 });
 
-    expect(scope.getState(m.$instances)["1"].count).toBe(50);
-    expect(scope.getState(m.$instances)["2"].count).toBe(50);
+    expect(scope.getState(m.$instances)["1"]?.count).toBe(50);
+    expect(scope.getState(m.$instances)["2"]?.count).toBe(50);
   });
 
   test("fn-mapped event updates only the target field", async () => {
     const m = model({
       contract: contract({
-        name: define.store(""),
-        age: define.store(0),
+        name: define.store(define.static<string>(), ""),
+        age: define.store(define.static<number>(), 0),
       })(),
       fn: ({ name, age }) => ({ name, age }),
     });
@@ -584,9 +600,9 @@ describe("lens wired via sample", () => {
     await allSettled(renameEvent, { scope, params: { newName: "Charlie" } });
 
     const instances = scope.getState(m.$instances);
-    expect(instances["u1"].name).toBe("Charlie");
-    expect(instances["u2"].name).toBe("Charlie");
-    expect(instances["u1"].age).toBe(30);
-    expect(instances["u2"].age).toBe(25);
+    expect(instances["u1"]?.name).toBe("Charlie");
+    expect(instances["u2"]?.name).toBe("Charlie");
+    expect(instances["u1"]?.age).toBe(30);
+    expect(instances["u2"]?.age).toBe(25);
   });
 });

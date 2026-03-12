@@ -123,8 +123,8 @@ describe("child used inside parent model fn", () => {
   test("child created inside fn does not throw", () => {
     const itemModel = model({
       contract: contract({
-        label: define.store(""),
-        score: define.store(0),
+        label: define.store(define.static<string>(), ""),
+        score: define.store(define.static<number>(), 0),
       })(),
       fn: ({ label, score }) => ({ label, score }),
     });
@@ -132,7 +132,7 @@ describe("child used inside parent model fn", () => {
     expect(() => {
       model({
         contract: contract({
-          parentValue: define.store(0),
+          parentValue: define.store(define.static<number>(), 0),
         })(),
         fn: ({ parentValue }) => {
           // Create a child scope for itemModel
@@ -155,12 +155,12 @@ describe("child used inside parent model fn", () => {
 
   test("multiple children with different base models coexist", () => {
     const modelA = model({
-      contract: contract({ a: define.store(0) })(),
+      contract: contract({ a: define.store(define.static<number>(), 0) })(),
       fn: ({ a }) => ({ a }),
     });
 
     const modelB = model({
-      contract: contract({ b: define.store("") })(),
+      contract: contract({ b: define.store(define.static<string>(), "") })(),
       fn: ({ b }) => ({ b }),
     });
 
@@ -221,8 +221,8 @@ describe("child() vs define.child()", () => {
     const elem = define.child(base);
     const m = child(base);
 
-    expect(elem["~type"]).toBe("child");
-    expect(m["~type"]).toBe("model");
+    expect(elem["~kind"]).toBe("child");
+    expect(m["~kind"]).toBe("model");
   });
 
   test("define.child preserves the model reference", () => {
