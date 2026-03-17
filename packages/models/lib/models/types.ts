@@ -77,9 +77,11 @@ export interface Model<T extends Contract<any>, Api extends ModelApi> {
   create: EventCallable<CreateInstancePayload<T>>;
 
   lens: Lens<Model<T, Api>> & LensProps<Model<T, Api>>;
+
+  static: (data: ContractData<T>) => Api;
 }
 
 export interface BaseInstance {
-  "~refs": Record<string, string[]>;
+  "~refs": Record<string, Array<{ model: Model<any, any>; id: string }>>;
   "~children": Record<string, Record<string, unknown>>;
 }

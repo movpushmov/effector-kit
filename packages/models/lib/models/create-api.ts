@@ -1,12 +1,28 @@
-import { createEvent, createStore, type Store } from "effector";
+import {
+  createEvent,
+  createStore,
+  type EventCallable,
+  type Store,
+  type StoreWritable,
+} from "effector";
 import type { Contract, ShapeElement } from "../contracts";
-import type { ContractApi } from "./types";
+import type { ContractApi, ContractData } from "./types";
 import { getContext, modifyStore } from "../runtime";
 import { createAction } from "effector-action";
+
+interface TransformContext {
+  key: string;
+}
+
+interface TransformApi {
+  onStore: (defaultValue: any, ctx: TransformContext) => StoreWritable<any>;
+  onEvent: () => EventCallable<any>;
+}
 
 function transform(
   from: Record<string, ShapeElement>,
   to: Record<string, any>,
+  api: TransformApi,
 ) {
   for (const key in from) {
     const item = from[key];
@@ -17,14 +33,11 @@ function transform(
 
     switch (item?.["~kind"]) {
       case "store": {
-        to[key] = createStore(item.defaultValue, { serialize: "ignore" });
-
-        modifyStore(to[key], key);
-
+        to[key] = api.onStore(item.defaultValue, { key });
         break;
       }
       case "event": {
-        to[key] = createEvent();
+        to[key] = api.onEvent();
         break;
       }
     }
@@ -36,7 +49,30 @@ export function createApi<T extends Contract<any>>(
 ): ContractApi<T> {
   const api = {} as ContractApi<T>;
 
-  transform(contract.shape, api);
+  transform(contract.shape, api, {
+    onStore: (defaultValue, { key }) => {
+      const store = createStore(defaultValue, { serialize: "ignore" });
+      modifyStore(store, key);
+
+      return store;
+    },
+    onEvent: () => createEvent(),
+  });
+
+  return api;
+}
+
+export function createStaticApi<T extends Contract<any>>(
+  contract: T,
+  data: ContractData<T>,
+): ContractApi<T> {
+  const api = {} as ContractApi<T>;
+
+  transform(contract.shape, api, {
+    onStore: (defaultValue, { key }) =>
+      createStore(data[key as keyof ContractData<T>] ?? defaultValue),
+    onEvent: () => createEvent(),
+  });
 
   return api;
 }

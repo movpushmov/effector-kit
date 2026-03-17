@@ -6,13 +6,25 @@ import {
   sample,
   type Event,
 } from "effector";
-import { isModel, type Model, type ModelApi } from "../models";
-import type { Lens, LensProps, LensPredicate, ModelLensApi } from "./types";
+import { type Model, type ModelApi } from "../models";
+import type {
+  Lens,
+  LensProps,
+  LensPredicate,
+  MatchCtx,
+  ModelLensApi,
+  UnionLens,
+} from "./types";
 import { getContext, setContext } from "../runtime";
+import { is as modelIs } from "../is";
+import type { Union, UnionMap } from "../union";
 
 const basePredicates = {
   where:
-    (fn: (data: any, props: any) => boolean): LensPredicate =>
+    (
+      fn: (data: any, props: any, ctx?: any) => boolean,
+      makeCtx?: (entity: any) => any,
+    ): LensPredicate =>
     (instances, props) => {
       const newInstances: any = {};
 
@@ -21,7 +33,10 @@ const basePredicates = {
 
         // Include the instance key as `id` so predicates can filter by key:
         // lens.where(({ id }) => id === "someKey")
-        if (fn({ id: key, ...instance }, props)) {
+        const entity = { id: key, ...instance };
+        const ctx = makeCtx ? makeCtx(entity) : undefined;
+
+        if (fn(entity, props, ctx)) {
           newInstances[key] = instance;
         }
       }
@@ -30,21 +45,11 @@ const basePredicates = {
     },
   first: (instances: Record<string | number, any>) => {
     const entry = Object.entries(instances)[0];
-
-    if (entry) {
-      return { [entry[0]]: entry[1] };
-    }
-
-    return {};
+    return entry ? { [entry[0]]: entry[1] } : {};
   },
   last: (instances: Record<string | number, any>) => {
     const entry = Object.entries(instances).at(-1);
-
-    if (entry) {
-      return { [entry[0]]: entry[1] };
-    }
-
-    return {};
+    return entry ? { [entry[0]]: entry[1] } : {};
   },
 };
 
@@ -56,34 +61,28 @@ function applyTransformers(
   instances: Record<string, any>,
   predicates: LensPredicate[],
   payload: any,
-) {
+): Record<string, any> {
   let buffer = instances;
-
   for (const predicate of predicates) {
     buffer = predicate(buffer, payload);
   }
-
   return buffer;
 }
 
 function getRuntimeInfo(
-  model: Model<any, any>,
+  getInstances: () => Record<string, any>,
   predicates: LensPredicate[],
   payload: any,
 ) {
   const ctx = getContext();
-  const instances = applyTransformers(
-    model.$instances.getState(),
-    predicates,
-    payload,
-  );
-
+  const instances = applyTransformers(getInstances(), predicates, payload);
   return { ctx, instances };
 }
 
 function exportModelApi<T extends Model<any, ModelApi>>(
   model: T,
   getPredicates: () => LensPredicate[],
+  getInstances: () => Record<string, any> = () => model.$instances.getState(),
 ): ModelLensApi<T, any> {
   const lensApi: any = {};
 
@@ -103,7 +102,7 @@ function exportModelApi<T extends Model<any, ModelApi>>(
             clock: element as Event<any>,
             filter: (payload) => {
               const { ctx, instances } = getRuntimeInfo(
-                model,
+                getInstances,
                 getPredicates(),
                 payload,
               );
@@ -132,7 +131,7 @@ function exportModelApi<T extends Model<any, ModelApi>>(
             const target = createEvent<any>();
             const actionFx = createEffect(async (payload: any) => {
               const { instances } = getRuntimeInfo(
-                model,
+                getInstances,
                 getPredicates(),
                 payload,
               );
@@ -181,7 +180,7 @@ function exportModelApi<T extends Model<any, ModelApi>>(
       lensApi[key] = unitElement;
     }
 
-    if (isModel(element)) {
+    if (modelIs.model(element)) {
       lensApi[key] = element.lens;
     }
   }
@@ -189,39 +188,212 @@ function exportModelApi<T extends Model<any, ModelApi>>(
   return lensApi;
 }
 
+// ---- Shared lens core ----
+
+function buildLensCore(getInstances: () => Record<string, any>) {
+  const predicates: LensPredicate[] = [];
+  return {
+    predicates,
+    getSource() {
+      return applyTransformers(getInstances(), predicates, undefined);
+    },
+  };
+}
+
+// ---- Union helpers ----
+
+/**
+ * Merges instances from all active union variants into a single map.
+ *
+ * Internal keys are namespaced as `"${model['~id']}:${id}"` so variants can
+ * share the same original ID without collision.  The entity's `id` field
+ * always holds the **original** ID, so `where((e) => e.id === "foo")` matches
+ * correctly across all variants.  Use `e["~model"]` to distinguish variants
+ * that share an ID.
+ */
+function collectUnionInstances(
+  inputUnion: Union<UnionMap>,
+  activeKeys: string[],
+): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const key of activeKeys) {
+    const m = inputUnion.models[key];
+    if (!m) continue;
+    for (const [id, data] of Object.entries(m.$instances.getState() ?? {})) {
+      result[`${m["~id"]}:${id}`] = { ...(data as any), id, "~model": key };
+    }
+  }
+  return result;
+}
+
+function makeMatchCtx(entity: any, models: UnionMap): MatchCtx<any> {
+  return {
+    match(config: any) {
+      const handler = config[entity["~model"]];
+      return handler ? handler(entity) : undefined;
+    },
+    uniqueId(variantKey: string, id: string): string {
+      return `${models[variantKey]?.["~id"] ?? variantKey}:${id}`;
+    },
+  };
+}
+
+// ---- Public API ----
+
+export function lens<T extends Union<UnionMap>>(
+  input: T,
+): UnionLens<T, keyof T["models"]>;
 export function lens<T extends Model<any, any>>(
   model: T,
-): Lens<T> & LensProps<T> {
-  let predicates: LensPredicate[] = [];
-  let mode: "single" | "multiply" = "multiply";
+): Lens<T> & LensProps<T>;
+export function lens(input: Union<UnionMap> | Model<any, any>): any {
+  if (modelIs.union(input)) {
+    const unionInput = input as Union<UnionMap>;
+    let activeKeys = Object.keys(unionInput.models);
+    const { predicates, getSource } = buildLensCore(() =>
+      collectUnionInstances(unionInput, activeKeys),
+    );
 
-  // @ts-expect-error
-  return {
-    getSource() {
-      return model.$instances.getState();
-    },
+    const lensObj: any = {
+      where(predicate: any) {
+        predicates.push(
+          basePredicates.where(predicate, (entity) =>
+            makeMatchCtx(entity, unionInput.models),
+          ),
+        );
+        return lensObj;
+      },
+      only(...keys: string[]) {
+        activeKeys = keys;
+        return lensObj;
+      },
+      match(config: Record<string, (subLens: any) => any>) {
+        const units: any[] = [];
 
+        for (const [key, handler] of Object.entries(config)) {
+          const variantModel = unionInput.models[key];
+          if (!variantModel) continue;
+
+          // Base instances for this key: union lens's own predicates applied.
+          // Internal keys are namespaced; extract the original id from the
+          // entity's `id` field to look up the raw instance in $instances.
+          const getKeyInstances = () => {
+            const filtered = getSource();
+            const original = variantModel.$instances.getState() ?? {};
+            const out: Record<string, any> = {};
+            for (const entity of Object.values(filtered)) {
+              if (entity["~model"] === key) {
+                const originalId = entity.id;
+                if (original[originalId])
+                  out[originalId] = original[originalId];
+              }
+            }
+            return out;
+          };
+
+          // Full model lens (where/first/last + per-store API) scoped to this
+          // variant's filtered instances — same pattern as the regular model lens.
+          const { predicates: subPredicates, getSource: getSubSource } =
+            buildLensCore(getKeyInstances);
+
+          const subLens: any = {
+            where(predicate: any) {
+              subPredicates.push(basePredicates.where(predicate));
+              return subLens;
+            },
+            first() {
+              subPredicates.push(basePredicates.first);
+              return subLens;
+            },
+            last() {
+              subPredicates.push(basePredicates.last);
+              return subLens;
+            },
+            ...exportModelApi(
+              variantModel,
+              () => subPredicates,
+              getKeyInstances,
+            ),
+          };
+
+          Object.defineProperty(subLens, "getSource", {
+            configurable: true,
+            value: getSubSource,
+          });
+
+          const unit = handler(subLens);
+          if (unit) units.push(unit);
+        }
+
+        // Return a single writable EventCallable that fans out to all per-key
+        // targets. Unlike merge(), this can be used as a sample target.
+        const event = createEvent<any>();
+        if (units.length > 0) {
+          sample({ clock: event, target: units });
+        }
+        return event;
+      },
+    };
+
+    // Per-key model API. getInstances reads through the union's filtered view
+    // (namespaced keys) and maps back to original ids for dispatch.
+    for (const [key, model] of Object.entries(unionInput.models)) {
+      lensObj[key] = exportModelApi(
+        model,
+        () => [],
+        () => {
+          const filtered = getSource();
+          const original = model.$instances.getState() ?? {};
+          const result: Record<string, any> = {};
+          for (const entity of Object.values(filtered)) {
+            if (entity["~model"] === key) {
+              const originalId = entity.id;
+              if (original[originalId])
+                result[originalId] = original[originalId];
+            }
+          }
+          return result;
+        },
+      );
+    }
+
+    // Keep getSource accessible for internal overrides (e.g. ref) but off the type.
+    Object.defineProperty(lensObj, "getSource", {
+      configurable: true,
+      value: getSource,
+    });
+
+    return lensObj;
+  }
+
+  const model = input as Model<any, any>;
+  const { predicates, getSource } = buildLensCore(() =>
+    model.$instances.getState(),
+  );
+
+  const lensObj: any = {
     props() {
-      return this;
+      return lensObj;
     },
-
-    where(predicate) {
+    where(predicate: (data: any, props?: any) => boolean) {
       predicates.push(basePredicates.where(predicate));
-      return this;
+      return lensObj;
     },
-
     first() {
-      mode = "single";
       predicates.push(basePredicates.first);
-      return this;
+      return lensObj;
     },
-
     last() {
-      mode = "single";
       predicates.push(basePredicates.last);
-      return this;
+      return lensObj;
     },
-
     ...exportModelApi(model, () => predicates),
   };
+
+  Object.defineProperty(lensObj, "getSource", {
+    configurable: true,
+    value: getSource,
+  });
+
+  return lensObj;
 }

@@ -1,3 +1,4 @@
+import type { Model } from "../models";
 import type { RuntimeContext } from "./types";
 
 let runtimeContext: RuntimeContext = {};
