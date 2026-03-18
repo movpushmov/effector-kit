@@ -36,6 +36,8 @@ importers:
         specifier: '>=4'
         version: 4.3.6
 
+  packages/inspector: {}
+
   packages/models:
     devDependencies:
       effector:
@@ -44,6 +46,12 @@ importers:
       effector-action:
         specifier: ^1.2.2
         version: 1.2.2(effector@23.4.4)(patronum@2.3.0(effector@23.4.4))
+
+  packages/react:
+    dependencies:
+      '@effector-kit/models':
+        specifier: workspace:*
+        version: link:../models
 
 packages:
 
