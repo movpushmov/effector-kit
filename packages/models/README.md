@@ -137,6 +137,32 @@ counterModel.$instances.getState();
 // { a: { count: 0 }, b: { count: 10 } }
 ```
 
+**`model.static(data)`**
+
+Builds a static (non-instance) API object from the model contract. Useful when you need a “plain” set of units shaped like the model API without creating/targeting instances.
+
+```ts
+// Using the same `counterModel` contract shape:
+const counterModel = model({
+  contract: contract({
+    count: define.store(define.static<number>(), 0),
+    increment: define.event(define.static<void>()),
+    reset: define.event(define.static<void>()),
+  })(),
+  fn: ({ count, increment, reset }) => ({ count, increment, reset }),
+});
+
+const staticCounter = counterModel.static({ count: 5 });
+
+staticCounter.count.getState(); // 5
+
+// The returned object is fully typed from the model contract:
+// - stores keep their value types
+// - events keep their payload types
+staticCounter.increment(); // EventCallable<void>
+staticCounter.reset(); // EventCallable<void>
+```
+
 ---
 
 ### `union(models)`
@@ -227,17 +253,22 @@ const listModel = model({
   contract: listContract(),
   fn: (api) => {
     const selected = ref(counterModel);
-    return { ...api, add: selected.add, remove: selected.remove, lens: selected.lens };
+    return {
+      ...api,
+      add: selected.add,
+      remove: selected.remove,
+      lens: selected.lens,
+    };
   },
 });
 ```
 
-| Property | Type | Description |
-| -------- | ---- | ----------- |
-| `add` | `EventCallable<string>` | Start tracking an instance ID |
-| `remove` | `EventCallable<string>` | Stop tracking an instance ID |
-| `$ids` | `StoreWritable<string[]>` | Currently tracked IDs |
-| `lens` | `Lens<Model>` | Lens over tracked instances; supports `where`, `first`, `last` |
+| Property | Type                      | Description                                                    |
+| -------- | ------------------------- | -------------------------------------------------------------- |
+| `add`    | `EventCallable<string>`   | Start tracking an instance ID                                  |
+| `remove` | `EventCallable<string>`   | Stop tracking an instance ID                                   |
+| `$ids`   | `StoreWritable<string[]>` | Currently tracked IDs                                          |
+| `lens`   | `Lens<Model>`             | Lens over tracked instances; supports `where`, `first`, `last` |
 
 #### `ref(union)` — union
 
@@ -245,24 +276,80 @@ const listModel = model({
 const dashboardModel = model({
   contract: dashboardContract(),
   fn: (api) => {
-    const selected = ref(union({ counter: counterModel, flagged: flaggedModel }));
-    return { ...api, add: selected.add, remove: selected.remove, lens: selected.lens };
+    const selected = ref(
+      union({ counter: counterModel, flagged: flaggedModel }),
+    );
+    return {
+      ...api,
+      add: selected.add,
+      remove: selected.remove,
+      lens: selected.lens,
+    };
   },
 });
 ```
 
-| Property | Type | Description |
-| -------- | ---- | ----------- |
-| `add` | `{ [K in keys]: EventCallable<string> }` | Start tracking an instance by variant |
-| `remove` | `{ [K in keys]: EventCallable<string> }` | Stop tracking an instance by variant |
-| `$ids` | `StoreWritable<Array<{ key: string; id: string }>>` | Tracked `{ key, id }` pairs |
-| `lens` | `UnionLens` | Lens over tracked instances; supports all union lens methods below |
+| Property | Type                                                | Description                                                        |
+| -------- | --------------------------------------------------- | ------------------------------------------------------------------ |
+| `add`    | `{ [K in keys]: EventCallable<string> }`            | Start tracking an instance by variant                              |
+| `remove` | `{ [K in keys]: EventCallable<string> }`            | Stop tracking an instance by variant                               |
+| `$ids`   | `StoreWritable<Array<{ key: string; id: string }>>` | Tracked `{ key, id }` pairs                                        |
+| `lens`   | `UnionLens`                                         | Lens over tracked instances; supports all union lens methods below |
 
 #### Union lens — `ref(union).lens`
 
 - **`.lens.only(...keys)`**: restrict variants (mutable chain)
 - **`.lens.where(...)`**: filter instances (mutable chain). Use `ctx.match({ ... })` for variant-specific predicates.
 - **`.lens.match({ ... })`**: build per-variant sub-lenses and merge their targets into one `EventCallable` (usable as a `sample` target).
+
+Examples for `.only(...)`:
+
+```ts
+// Only ONE key → `e` is that single entity type.
+selected.lens.only("counter").where((e) => e.count > 0);
+//            ^ e: { id: string; count: number; ... }
+
+// Two (or more) keys → `e` is a discriminated union of those entity types.
+selected.lens.only("counter", "flagged").where((e, _, ctx) => {
+  // ctx.match only needs handlers for the active keys
+  return (
+    ctx!.match({
+      counter: (x) => x.count > 0,
+      flagged: (x) => x.score > 0,
+    }) ?? false
+  );
+});
+
+// 2–3 keys works the same way.
+selected.lens.only("counter", "flagged", "other").where((e, _, ctx) => {
+  return (
+    ctx!.match({
+      counter: () => true,
+      flagged: () => true,
+      other: () => true,
+    }) ?? false
+  );
+});
+```
+
+Example `where((e, _, ctx) => ...)`:
+
+```ts
+selected.lens.where((e, _, ctx) => {
+  // Variant-specific predicate without reading internal tags:
+  const ok = ctx!.match({
+    counter: (x) => x.count > 0,
+    flagged: (x) => x.score > 0,
+  });
+
+  // If you need the internal namespaced key for a known union key + id:
+  // (use union keys explicitly: "counter" | "flagged" | ...)
+  const key = ctx!.uniqueId("counter", e.id);
+  void key;
+
+  return ok ?? false;
+});
+```
 
 ---
 
@@ -305,14 +392,14 @@ The returned child is a full `Model` with its own `$instances`, `create`, and `l
 
 ```ts
 import type {
-  Model,        // the full model object
-  ModelApi,     // { [key]: Store | Event | Effect | ModelApi }
+  Model, // the full model object
+  ModelApi, // { [key]: Store | Event | Effect | ModelApi }
   ContractData, // inferred instance data shape from a contract
-  ContractApi,  // inferred unit shape from a contract
-  Union,        // return type of union()
-  UnionMap,     // { [key: string]: Model<any, any> }
-  Ref,          // return type of ref()
-  Lens,         // type of model.lens / ref.lens / child.lens
+  ContractApi, // inferred unit shape from a contract
+  Union, // return type of union()
+  UnionMap, // { [key: string]: Model<any, any> }
+  Ref, // return type of ref()
+  Lens, // type of model.lens / ref.lens / child.lens
 } from "@effector-kit/models";
 ```
 
@@ -337,10 +424,10 @@ const flaggedModel = model({
 const dashboardModel = model({
   contract: contract({})(),
   fn: () => {
-    const selected = ref(union({ counter: counterModel, flagged: flaggedModel }));
+    const selected = ref(
+      union({ counter: counterModel, flagged: flaggedModel }),
+    );
 
-    // One trigger → different targets per variant.
-    // match(...) returns a single merged EventCallable.
     const bumpAll = createEvent<number>();
     const merged = selected.lens.match({
       counter: (sub) => sub.where((e) => e.count > 4).count.target(),
