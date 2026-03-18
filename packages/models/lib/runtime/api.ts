@@ -37,10 +37,7 @@ export function modifyStore($store: StoreWritable<any>, key: string): void {
   });
 }
 
-export function modifyRefsStore(
-  model: Model<any, any>,
-  $store: StoreWritable<any>,
-): void {
+export function modifyRefsStore($store: StoreWritable<any>): void {
   reserve([$store]);
   Object.defineProperty(($store as any).graphite.meta.stateRef, "current", {
     get() {
@@ -56,7 +53,11 @@ export function modifyRefsStore(
         instance["~refs"] = {};
       }
 
-      return instance["~refs"][model["~id"]] ?? [];
+      if (!ctx.current.target) {
+        return null;
+      }
+
+      return instance["~refs"][ctx.current.target["~id"]] ?? [];
     },
   });
 
@@ -80,10 +81,11 @@ export function modifyRefsStore(
         ctx.current.instance["~refs"] = {};
       }
 
-      ctx.current.instance["~refs"][model["~id"]] = [
-        ...ctx.current.instance["~refs"][model["~id"]],
-        value,
-      ];
+      if (!ctx.current.target) {
+        return null;
+      }
+
+      ctx.current.instance["~refs"][ctx.current.target["~id"]] = value;
     },
   });
 }

@@ -1,9 +1,9 @@
-import { describe, test, expect, vi } from "vitest";
-import { createEvent, createStore, fork, allSettled } from "effector";
+import { describe, test, expect } from "vitest";
+import { fork, allSettled, createEvent, createStore } from "effector";
 import { model } from "../lib/models";
 import { contract } from "../lib/contracts";
 import { define } from "../lib/define";
-import { isModel } from "../lib/models/utils";
+import { is } from "../lib";
 
 // ---------------------------------------------------------------------------
 // define helpers
@@ -98,44 +98,44 @@ describe("contract", () => {
 });
 
 // ---------------------------------------------------------------------------
-// isModel
+// is.model
 // ---------------------------------------------------------------------------
 
-describe("isModel", () => {
+describe("is.model", () => {
   test("returns true for a model", () => {
     const m = model({
       contract: contract({ x: define.store(define.static<number>(), 0) })(),
       fn: ({ x }) => ({ x }),
     });
-    expect(isModel(m)).toBe(true);
+    expect(is.model(m)).toBe(true);
   });
 
   test("returns false for null", () => {
-    expect(isModel(null)).toBe(false);
+    expect(is.model(null)).toBe(false);
   });
 
   test("returns false for undefined", () => {
-    expect(isModel(undefined)).toBe(false);
+    expect(is.model(undefined)).toBe(false);
   });
 
   test("returns false for a plain object", () => {
-    expect(isModel({ "~type": "not-model" })).toBe(false);
+    expect(is.model({ "~type": "not-model" })).toBe(false);
   });
 
   test("returns false for a plain object without ~type", () => {
-    expect(isModel({})).toBe(false);
+    expect(is.model({})).toBe(false);
   });
 
   test("returns false for a number", () => {
-    expect(isModel(42)).toBe(false);
+    expect(is.model(42)).toBe(false);
   });
 
   test("returns false for an effector event", () => {
-    expect(isModel(createEvent())).toBe(false);
+    expect(is.model(createEvent())).toBe(false);
   });
 
   test("returns false for an effector store", () => {
-    expect(isModel(createStore(0))).toBe(false);
+    expect(is.model(createStore(0))).toBe(false);
   });
 });
 

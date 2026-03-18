@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "effector": "23.4.4",
-    "effector-action": "^1.2.2"
+    "effector-action": "1.2.2"
   },
   "packageManager": "pnpm@10.10.0"
 }

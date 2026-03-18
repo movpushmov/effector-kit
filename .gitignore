@@ -2,3 +2,4 @@ node_modules
 docs/.vitepress/cache/**
 dist
 .DS_Store
+.swc

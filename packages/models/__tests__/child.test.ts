@@ -1,10 +1,9 @@
 import { describe, test, expect } from "vitest";
-import { sample, createEvent } from "effector";
 import { model } from "../lib/models";
 import { contract } from "../lib/contracts";
 import { define } from "../lib/define";
 import { child } from "../lib/child/child";
-import { isModel } from "../lib/models/utils";
+import { is } from "../lib";
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 10));
 
@@ -27,10 +26,10 @@ function makeBaseModel() {
 // ---------------------------------------------------------------------------
 
 describe("child() structure", () => {
-  test("returns a model (isModel returns true)", () => {
+  test("returns a model (is.model returns true)", () => {
     const base = makeBaseModel();
     const c = child(base);
-    expect(isModel(c)).toBe(true);
+    expect(is.model(c)).toBe(true);
   });
 
   test("returned child has same contract as input model", () => {
@@ -137,7 +136,7 @@ describe("child used inside parent model fn", () => {
         fn: ({ parentValue }) => {
           // Create a child scope for itemModel
           const childItems = child(itemModel);
-          expect(isModel(childItems)).toBe(true);
+          expect(is.model(childItems)).toBe(true);
           return { parentValue };
         },
       });
@@ -168,8 +167,8 @@ describe("child used inside parent model fn", () => {
       const childA = child(modelA);
       const childB = child(modelB);
 
-      expect(isModel(childA)).toBe(true);
-      expect(isModel(childB)).toBe(true);
+      expect(is.model(childA)).toBe(true);
+      expect(is.model(childB)).toBe(true);
       expect(childA["~id"]).not.toBe(childB["~id"]);
     }).not.toThrow();
   });

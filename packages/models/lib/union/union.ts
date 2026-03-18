@@ -1,10 +1,5 @@
-import type { Model } from "../models";
-import { ref, type Ref } from "../ref";
+import type { Union, UnionMap } from "./types";
 
-export function union<T extends Model<any, any>>(...args: T[]): void {
-  const unionRefs: Ref<any>[] = [];
-
-  for (const arg of args) {
-    unionRefs.push(ref(arg));
-  }
+export function union<T extends UnionMap>(map: T): Union<T> {
+  return { "~kind": "union", models: map };
 }

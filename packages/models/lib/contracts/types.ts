@@ -1,4 +1,4 @@
-import type { HKT } from "../../hkt";
+import type { HKT } from "../hkt";
 import type { Model } from "../models";
 
 export type GenericsMap = Record<string, any>;

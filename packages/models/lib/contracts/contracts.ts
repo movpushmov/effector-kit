@@ -1,4 +1,4 @@
-import type { HKT } from "../../hkt";
+import type { HKT } from "../hkt";
 import type {
   Contract,
   ExtractGenericsFromShape,

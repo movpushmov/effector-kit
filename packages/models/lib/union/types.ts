@@ -1,7 +1,8 @@
-import type { Lens } from "../lens";
 import type { Model } from "../models";
 
-export interface Union<Elements extends Model<any, any>[]> {
+export type UnionMap = Record<string, Model<any, any>>;
+
+export interface Union<Map extends UnionMap> {
   "~kind": "union";
-  models: Elements;
+  models: Map;
 }
