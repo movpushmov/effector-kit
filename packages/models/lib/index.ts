@@ -13,3 +13,4 @@ export type { Model, ModelApi, ContractData, ContractApi } from "./models";
 export type { Ref } from "./ref";
 export type { Lens } from "./lens";
 export type { Union, UnionMap } from "./union";
+export type { Contract, Shape, ShapeElement } from "./contracts";
