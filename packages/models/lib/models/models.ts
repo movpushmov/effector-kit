@@ -9,7 +9,7 @@ import type {
   ModelApi,
 } from "./types";
 import { modifyDeclarations } from "../runtime";
-import { createApi } from "./create-api";
+import { createApi, createStaticApi } from "./create-api";
 import { lens } from "../lens";
 
 interface ModelOptions<T extends Contract<any>, Api extends ModelApi> {
@@ -63,5 +63,9 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
 
   return Object.assign(builtModel, {
     lens: lens(builtModel as unknown as Model<T, Api>),
+
+    static(data: ContractData<T>) {
+      return createStaticApi(contract, data);
+    },
   }) as unknown as Model<T, Api>;
 }

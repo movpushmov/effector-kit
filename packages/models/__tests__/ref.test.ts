@@ -1,11 +1,31 @@
+/**
+ * Tests for ref() – the simplified add/remove API.
+ *
+ * ref(model) exposes:
+ *   add:    EventCallable<string>  — track an instance id
+ *   remove: EventCallable<string>  — untrack an instance id
+ *
+ * ref(union({a, b, …})) exposes:
+ *   add:    { a: EventCallable<string>, b: EventCallable<string>, … }
+ *   remove: { a: EventCallable<string>, b: EventCallable<string>, … }
+ *
+ * The ref overrides getSource on its lens so it reads only from the tracked
+ * ids store (custom storage) instead of the full model $instances.  This is
+ * the same pattern used by child: the lens points at a different storage layer,
+ * not a filtered view of the original storage.
+ *
+ * NOTE on scope: $ids is a plain store.  store.getState() returns scope-local
+ * values inside allSettled when the store is not included in fork({ values }).
+ * Ensuring $ids is in scope is the developer's responsibility — it is not
+ * tested here.
+ */
 import { describe, test, expect } from "vitest";
 import { sample, createEvent } from "effector";
 import { model } from "../lib/models";
 import { contract } from "../lib/contracts";
 import { define } from "../lib/define";
 import { ref } from "../lib/ref/ref";
-
-const tick = () => new Promise<void>((r) => setTimeout(r, 10));
+import { union } from "../lib/union";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -21,30 +41,204 @@ function makeItemModel() {
   });
 }
 
+function makeCounter() {
+  return model({
+    contract: contract({ count: define.store(define.static<number>(), 0) })(),
+    fn: ({ count }) => ({ count }),
+  });
+}
+
+/** Call (ref.lens as any).getSource() */
+function getSource(r: any): Record<string, any> {
+  return (r.lens as any).getSource();
+}
+
 // ---------------------------------------------------------------------------
-// ref creation
+// ref(model) – structure
 // ---------------------------------------------------------------------------
 
-describe("ref() structure", () => {
-  test("returns an object with ~type 'ref'", () => {
-    const m = makeItemModel();
-    const r = ref(m);
+describe("ref(model) structure", () => {
+  test("has ~kind 'ref'", () => {
+    const r = ref(makeItemModel());
     expect(r["~kind"]).toBe("ref");
   });
 
-  test("returned ref has a lens property", () => {
-    const m = makeItemModel();
-    const r = ref(m);
+  test("has add and remove as callable events", () => {
+    const r = ref(makeItemModel());
+    expect(typeof r.add).toBe("function");
+    expect(typeof r.remove).toBe("function");
+  });
+
+  test("add and remove are EventCallable (have watch)", () => {
+    const r = ref(makeItemModel());
+    expect(typeof r.add.watch).toBe("function");
+    expect(typeof r.remove.watch).toBe("function");
+  });
+
+  test("has a lens property", () => {
+    const r = ref(makeItemModel());
     expect(r.lens).toBeDefined();
   });
 
-  test("ref lens has getSource", () => {
-    const m = makeItemModel();
-    const r = ref(m);
-    expect(typeof r.lens.getSource).toBe("function");
+  test("lens has where, first, last methods from the underlying model lens", () => {
+    const r = ref(makeItemModel());
+    expect(typeof r.lens.where).toBe("function");
+    expect(typeof r.lens.first).toBe("function");
+    expect(typeof r.lens.last).toBe("function");
   });
 
-  test("ref lens has where, first, last", () => {
+  test("getSource is accessible via cast (internal, not on public type)", () => {
+    const r = ref(makeItemModel());
+    expect(typeof (r.lens as any).getSource).toBe("function");
+  });
+
+  test("lens exposes the model's API units", () => {
+    const r = ref(makeItemModel());
+    expect((r.lens as any).label).toBeDefined();
+    expect(typeof (r.lens as any).label.target).toBe("function");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ref(model) – add and remove behaviour via getSource
+// ---------------------------------------------------------------------------
+
+describe("ref(model) add/remove behaviour", () => {
+  test("getSource returns empty before any add", () => {
+    const m = makeItemModel();
+    m.create({ id: "1", data: { label: "A", active: true } });
+    const r = ref(m);
+    expect(getSource(r)).toEqual({});
+  });
+
+  test("after add(id) the instance appears in getSource", () => {
+    const m = makeItemModel();
+    m.create({ id: "1", data: { label: "Hello", active: true } });
+    const r = ref(m);
+
+    r.add("1");
+
+    const src = getSource(r);
+    expect(src["1"]).toBeDefined();
+    expect(src["1"]?.label).toBe("Hello");
+  });
+
+  test("multiple adds accumulate tracked ids", () => {
+    const m = makeItemModel();
+    m.create({ id: "1", data: { label: "A", active: true } });
+    m.create({ id: "2", data: { label: "B", active: false } });
+    m.create({ id: "3", data: { label: "C", active: true } });
+    const r = ref(m);
+
+    r.add("1");
+    r.add("2");
+    r.add("3");
+
+    expect(Object.keys(getSource(r))).toHaveLength(3);
+  });
+
+  test("remove(id) stops tracking that id", () => {
+    const m = makeItemModel();
+    m.create({ id: "1", data: { label: "A", active: true } });
+    m.create({ id: "2", data: { label: "B", active: false } });
+    const r = ref(m);
+
+    r.add("1");
+    r.add("2");
+    r.remove("1");
+
+    const src = getSource(r);
+    expect(src["1"]).toBeUndefined();
+    expect(src["2"]).toBeDefined();
+  });
+
+  test("remove of an untracked id is a no-op", () => {
+    const m = makeItemModel();
+    m.create({ id: "1", data: { label: "A", active: true } });
+    const r = ref(m);
+
+    r.add("1");
+    r.remove("not-tracked");
+
+    expect(getSource(r)["1"]).toBeDefined();
+  });
+
+  test("two refs on the same model track independently", () => {
+    const m = makeItemModel();
+    m.create({ id: "1", data: { label: "A", active: true } });
+    m.create({ id: "2", data: { label: "B", active: false } });
+    const r1 = ref(m);
+    const r2 = ref(m);
+
+    r1.add("1");
+    r2.add("2");
+
+    expect(getSource(r1)["1"]).toBeDefined();
+    expect(getSource(r1)["2"]).toBeUndefined();
+    expect(getSource(r2)["1"]).toBeUndefined();
+    expect(getSource(r2)["2"]).toBeDefined();
+  });
+
+  test("add does not expose add.someKey (union-only API)", () => {
+    const r = ref(makeItemModel()) as any;
+    expect(typeof r.add).toBe("function");
+    expect(r.add.a).toBeUndefined();
+  });
+
+  test("add can be used as a sample target", () => {
+    const m = makeCounter();
+    m.create({ id: "x", data: { count: 0 } });
+    const r = ref(m);
+
+    const trigger = createEvent<string>();
+    sample({ clock: trigger, target: r.add });
+
+    trigger("x");
+    expect(getSource(r)["x"]).toBeDefined();
+  });
+
+  test("remove can be used as a sample target", () => {
+    const m = makeCounter();
+    m.create({ id: "x", data: { count: 0 } });
+    const r = ref(m);
+
+    const trigger = createEvent<string>();
+    sample({ clock: trigger, target: r.remove });
+
+    r.add("x");
+    expect(getSource(r)["x"]).toBeDefined();
+
+    trigger("x");
+    expect(getSource(r)["x"]).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ref(model) – lens API
+// ---------------------------------------------------------------------------
+
+describe("ref(model) lens API", () => {
+  test("ref.lens and model.lens are different objects", () => {
+    const m = makeItemModel();
+    const r = ref(m);
+    expect(r.lens).not.toBe(m.lens);
+  });
+
+  test("model.lens.getSource returns all instances; ref.lens.getSource is tracked-only", () => {
+    const m = makeItemModel();
+    m.create({ id: "1", data: { label: "A", active: true } });
+    m.create({ id: "2", data: { label: "B", active: false } });
+    const r = ref(m);
+
+    r.add("1");
+
+    expect(Object.keys((m.lens as any).getSource())).toHaveLength(2);
+    expect(Object.keys(getSource(r))).toHaveLength(1);
+  });
+
+  test("ref.lens.where() is available for dispatch filtering", () => {
+    // where() adds a predicate used by target()/clock() dispatch — not by getSource().
+    // getSource() on a ref always returns the full set of tracked instances.
     const m = makeItemModel();
     const r = ref(m);
     expect(typeof r.lens.where).toBe("function");
@@ -54,147 +248,141 @@ describe("ref() structure", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ref getSource() – filters by tracked ids
+// ref(union) – structure
 // ---------------------------------------------------------------------------
 
-describe("ref lens.getSource()", () => {
-  test("returns empty object when outside context (null ids guarded to {})", () => {
-    const m = makeItemModel();
-    const r = ref(m);
-
-    // $ids reads from instance context; outside context the getter returns null.
-    // getSource() guards against null and returns {} in that case.
-    m.create({ id: "1", data: { label: "A", active: true } });
-    m.create({ id: "2", data: { label: "B", active: false } });
-
-    expect(r.lens.getSource()).toEqual({});
+describe("ref(union) structure", () => {
+  test("has ~kind 'ref'", () => {
+    const r = ref(union({ a: makeItemModel(), b: makeItemModel() }));
+    expect(r["~kind"]).toBe("ref");
   });
 
-  test("different refs on same model are independent — both empty outside context", () => {
-    const m = makeItemModel();
-    const r1 = ref(m);
-    const r2 = ref(m);
-
-    m.create({ id: "1", data: { label: "A", active: true } });
-
-    expect(r1.lens.getSource()).toEqual({});
-    expect(r2.lens.getSource()).toEqual({});
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ref lens API – target and clock exist
-// ---------------------------------------------------------------------------
-
-describe("ref lens API", () => {
-  test("ref lens exposes store targets from the underlying model", () => {
-    const m = makeItemModel();
-    const r = ref(m);
-
-    // The lens should have the model's API units
-    expect((r.lens as any).label).toBeDefined();
-    expect(typeof (r.lens as any).label.target).toBe("function");
-    expect(typeof (r.lens as any).label.clock).toBe("function");
+  test("add is an object with a key per union variant", () => {
+    const r = ref(union({ a: makeItemModel(), b: makeItemModel() }));
+    expect(typeof (r.add as any).a).toBe("function");
+    expect(typeof (r.add as any).b).toBe("function");
   });
 
-  test("ref lens target on empty ref is a no-op", async () => {
-    const m = makeItemModel();
-    const r = ref(m);
+  test("remove is an object with a key per union variant", () => {
+    const r = ref(union({ a: makeItemModel(), b: makeItemModel() }));
+    expect(typeof (r.remove as any).a).toBe("function");
+    expect(typeof (r.remove as any).b).toBe("function");
+  });
 
-    m.create({ id: "1", data: { label: "original", active: false } });
+  test("per-key add/remove events are EventCallable (have watch)", () => {
+    const r = ref(union({ a: makeItemModel(), b: makeItemModel() }));
+    expect(typeof (r.add as any).a.watch).toBe("function");
+    expect(typeof (r.remove as any).b.watch).toBe("function");
+  });
 
-    // r has no ids tracked, so target should be a no-op
-    const setLabel = (r.lens as any).label.target();
-    setLabel("changed");
-    await tick();
+  test("has a lens with only and where methods (UnionLens)", () => {
+    const r = ref(union({ a: makeItemModel(), b: makeItemModel() }));
+    expect(typeof r.lens.only).toBe("function");
+    expect(typeof r.lens.where).toBe("function");
+  });
 
-    // Instance should not be updated since ref has no ids
-    expect(m.$instances.getState()["1"]?.label).toBe("original");
+  test("add.a and add.b are different events", () => {
+    const r = ref(union({ a: makeItemModel(), b: makeItemModel() }));
+    expect((r.add as any).a).not.toBe((r.add as any).b);
   });
 });
 
 // ---------------------------------------------------------------------------
-// ref inside a model (using modifyRefsStore context)
+// ref(union) – add/remove behaviour via getSource
 // ---------------------------------------------------------------------------
 
-describe("ref used inside a model's fn", () => {
-  test("ref created inside fn can be used to store instance ids", async () => {
-    const targetModel = makeItemModel();
+describe("ref(union) add/remove behaviour", () => {
+  test("getSource returns empty before any add", () => {
+    const a = makeItemModel();
+    const b = makeItemModel();
+    a.create({ id: "a1", data: { label: "A", active: true } });
+    b.create({ id: "b1", data: { label: "B", active: false } });
+    const r = ref(union({ a, b }));
 
-    // A parent model that holds a ref to targetModel
-    const parentModel = model({
-      contract: contract({
-        refIds: define.store(define.static<string[]>(), []),
-        setRef: define.event(define.static<string[]>()),
-      })(),
-      fn: ({ refIds, setRef }) => {
-        const r = ref(targetModel);
-
-        // Wire setRef event to update ref ids
-        // (In real usage, r's $ids would be the context-aware store,
-        //  but we test that the ref object is created without errors)
-        sample({
-          clock: setRef,
-          target: refIds,
-        });
-
-        return { refIds, setRef };
-      },
-    });
-
-    parentModel.create({ id: "p1", data: { refIds: [] } });
-
-    // Verify parent model was created successfully
-    expect(parentModel.$instances.getState()["p1"]).toBeDefined();
+    expect(getSource(r)).toEqual({});
   });
 
-  test("multiple refs to different models can coexist in a fn", () => {
-    const modelA = makeItemModel();
-    const modelB = makeItemModel();
+  test("add.a(id) tracks a modelA instance, tagged with ~model: 'a'", () => {
+    const a = makeItemModel();
+    const b = makeItemModel();
+    a.create({ id: "a1", data: { label: "Alpha", active: true } });
+    const r = ref(union({ a, b }));
 
-    expect(() => {
-      model({
-        contract: contract({
-          x: define.store(define.static<number>(), 0),
-        })(),
-        fn: ({ x }) => {
-          const refA = ref(modelA);
-          const refB = ref(modelB);
+    (r.add as any).a("a1");
 
-          // Just creating refs shouldn't throw
-          expect(refA["~kind"]).toBe("ref");
-          expect(refB["~kind"]).toBe("ref");
-
-          return { x };
-        },
-      });
-    }).not.toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ref – distinct from model lens
-// ---------------------------------------------------------------------------
-
-describe("ref vs model lens", () => {
-  test("ref and model.lens are different objects", () => {
-    const m = makeItemModel();
-    const r = ref(m);
-
-    expect(r.lens).not.toBe(m.lens);
+    const entries = Object.values(getSource(r)) as any[];
+    const entry = entries.find((e) => e.id === "a1");
+    expect(entry).toBeDefined();
+    expect(entry?.["~model"]).toBe("a");
+    expect(entry?.label).toBe("Alpha");
   });
 
-  test("model.lens.getSource returns all instances; ref.lens.getSource is filtered", () => {
-    const m = makeItemModel();
-    const r = ref(m);
+  test("add.b(id) tracks a modelB instance, tagged with ~model: 'b'", () => {
+    const a = makeItemModel();
+    const b = makeItemModel();
+    b.create({ id: "b1", data: { label: "Beta", active: false } });
+    const r = ref(union({ a, b }));
 
-    m.create({ id: "1", data: { label: "A", active: true } });
-    m.create({ id: "2", data: { label: "B", active: false } });
+    (r.add as any).b("b1");
 
-    // model lens returns all
-    expect(Object.keys(m.lens.getSource())).toHaveLength(2);
+    const entries = Object.values(getSource(r)) as any[];
+    const entry = entries.find((e) => e.id === "b1");
+    expect(entry?.["~model"]).toBe("b");
+    expect(entry?.label).toBe("Beta");
+  });
 
-    // ref lens returns only tracked ids (none here → empty)
-    expect(r.lens.getSource()).toEqual({});
+  test("add.a and add.b together track both variants independently", () => {
+    const a = makeItemModel();
+    const b = makeItemModel();
+    a.create({ id: "a1", data: { label: "A", active: true } });
+    b.create({ id: "b1", data: { label: "B", active: false } });
+    const r = ref(union({ a, b }));
+
+    (r.add as any).a("a1");
+    (r.add as any).b("b1");
+
+    const entries = Object.values(getSource(r)) as any[];
+    expect(entries.find((e) => e["~model"] === "a" && e.id === "a1")).toBeDefined();
+    expect(entries.find((e) => e["~model"] === "b" && e.id === "b1")).toBeDefined();
+  });
+
+  test("remove.a(id) untracks only that variant's instance", () => {
+    const a = makeItemModel();
+    const b = makeItemModel();
+    a.create({ id: "a1", data: { label: "A", active: true } });
+    b.create({ id: "b1", data: { label: "B", active: false } });
+    const r = ref(union({ a, b }));
+
+    (r.add as any).a("a1");
+    (r.add as any).b("b1");
+    (r.remove as any).a("a1");
+
+    const entries = Object.values(getSource(r)) as any[];
+    expect(entries.find((e) => e["~model"] === "a" && e.id === "a1")).toBeUndefined();
+    expect(entries.find((e) => e["~model"] === "b" && e.id === "b1")).toBeDefined();
+  });
+
+  test("two union refs on the same union track independently", () => {
+    const a = makeItemModel();
+    a.create({ id: "a1", data: { label: "A", active: true } });
+    const u = union({ a });
+    const r1 = ref(u);
+    const r2 = ref(u);
+
+    (r1.add as any).a("a1");
+
+    const r1Entries = Object.values(getSource(r1)) as any[];
+    const r2Entries = Object.values(getSource(r2)) as any[];
+    expect(r1Entries.find((e) => e.id === "a1")).toBeDefined();
+    expect(r2Entries.find((e) => e.id === "a1")).toBeUndefined();
+  });
+
+  test("union ref lens where() is available for dispatch filtering", () => {
+    // where() adds a predicate used by target()/clock() — not by getSource().
+    // getSource() on a ref always returns the full tracked set.
+    const a = makeItemModel();
+    const r = ref(union({ a }));
+    expect(typeof r.lens.where).toBe("function");
+    expect(typeof r.lens.only).toBe("function");
   });
 });

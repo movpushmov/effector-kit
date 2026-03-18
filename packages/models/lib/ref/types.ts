@@ -1,7 +1,22 @@
+import type { EventCallable, StoreWritable } from "effector";
 import type { Lens } from "../lens";
 import type { Model } from "../models";
+import type { Union, UnionMap } from "../union";
 
-export interface Ref<T extends Model<any, any>> {
+type RefOps<T extends Model<any, any> | Union<UnionMap>> =
+  T extends Union<UnionMap>
+    ? {
+        add: { [K in keyof T["models"]]: EventCallable<string> };
+        remove: { [K in keyof T["models"]]: EventCallable<string> };
+        $ids: StoreWritable<Array<{ key: string; id: string }>>;
+      }
+    : {
+        add: EventCallable<string>;
+        remove: EventCallable<string>;
+        $ids: StoreWritable<string[]>;
+      };
+
+export type Ref<T extends Model<any, any> | Union<UnionMap>> = {
   "~kind": "ref";
   lens: Lens<T>;
-}
+} & RefOps<T>;

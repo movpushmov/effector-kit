@@ -15,6 +15,7 @@ export type DispatcherEvent =
 
 interface RuntimeContextInfo {
   model: Model<any, any>;
+  target?: Model<any, any>;
   instance: any;
   scope?: Scope | undefined;
 }
