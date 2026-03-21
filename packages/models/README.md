@@ -125,6 +125,7 @@ const counterModel = model({
 | ------------ | ------------------------------------------- | ------------------------- |
 | `$instances` | `Store<Record<string, Data>>`               | All live instances        |
 | `create`     | `EventCallable<{ id: string; data: Data }>` | Creates a new instance    |
+| `delete`     | `EventCallable<string>`                     | Removes instance by id    |
 | `lens`       | `Lens`                                      | Targeting API (see below) |
 
 **Creating instances:**
@@ -135,6 +136,14 @@ counterModel.create({ id: "b", data: { count: 10 } });
 
 counterModel.$instances.getState();
 // { a: { count: 0 }, b: { count: 10 } }
+```
+
+**Removing instance:**
+
+`delete` accepts an instance id and drops that key from `$instances`.
+
+```ts
+counterModel.delete("a");
 ```
 
 **`model.static(data)`**
@@ -240,6 +249,18 @@ counterModel.lens
   .count.target();
 ```
 
+#### `lens.delete()`
+
+Returns an `EventCallable<void>`. When called, it removes every instance in the current lens selection by id:
+
+```ts
+const purgeZero = createEvent<void>();
+sample({
+  clock: purgeZero,
+  target: counterModel.lens.where(({ count }) => count === 0).delete(),
+});
+```
+
 ---
 
 ### `ref(model)` and `ref(union)`
@@ -301,6 +322,7 @@ const dashboardModel = model({
 - **`.lens.only(...keys)`**: restrict variants (mutable chain)
 - **`.lens.where(...)`**: filter instances (mutable chain). Use `ctx.match({ ... })` for variant-specific predicates.
 - **`.lens.match({ ... })`**: build per-variant sub-lenses and merge their targets into one `EventCallable` (usable as a `sample` target).
+- **`.lens.delete()`**: returns `EventCallable` that removes every instance in the current selection when called (usable as a `sample` target).
 
 Examples for `.only(...)`:
 
