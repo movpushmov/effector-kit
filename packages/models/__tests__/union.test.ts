@@ -433,6 +433,32 @@ describe("lens(union).where()", () => {
 });
 
 // ---------------------------------------------------------------------------
+// lens(union).delete()
+// ---------------------------------------------------------------------------
+
+describe("lens(union).delete() via scope", () => {
+  test("removes instances from the correct variant $instances", async () => {
+    const a = makeCounter();
+    const b = makeCounter();
+    a.create({ id: "a1", data: { count: 1 } });
+    b.create({ id: "b1", data: { count: 2 } });
+
+    const l = lens(union({ a, b }));
+    const trigger = createEvent<void>();
+    sample({
+      clock: trigger,
+      target: l.where((e) => e["~model"] === "a").delete(),
+    });
+
+    const scope = forkWith(a, b);
+    await allSettled(trigger, { scope });
+
+    expect(scope.getState(a.$instances)["a1"]).toBeUndefined();
+    expect(scope.getState(b.$instances)["b1"]?.count).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // lens(union) per-key target() – scope mutations
 // ---------------------------------------------------------------------------
 
