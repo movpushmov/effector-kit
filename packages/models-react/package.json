@@ -1,17 +1,18 @@
 {
-  "name": "@effector-kit/models",
+  "name": "@effector-kit/models-react",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "private": false,
   "version": "0.0.0-beta.2",
-  "description": "Effector dynamic models runtime",
+  "description": "React bindings for Effector dynamic models (@effector-kit/models)",
   "keywords": [
     "effector",
     "models",
     "dynamic",
-    "forms",
+    "react",
+    "hooks",
     "effector-kit",
     "effector",
     "kit"
@@ -46,12 +47,19 @@
     "url": "https://github.com/movpushmov/effector-kit/issues"
   },
   "peerDependencies": {
+    "@effector-kit/models": ">=0.0.0-beta.2",
     "effector": ">=23.4.4",
-    "effector-action": ">=1.2.2"
+    "effector-action": ">=1.2.2",
+    "effector-react": ">=23.3.0",
+    "react": ">=16.8.0 <20.0.0"
   },
   "devDependencies": {
+    "@effector-kit/models": "workspace:*",
     "effector": "23.4.4",
-    "effector-action": "1.2.2"
+    "effector-action": "1.2.2",
+    "effector-react": "23.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "packageManager": "pnpm@10.10.0"
 }

@@ -3,3 +3,4 @@ docs/.vitepress/cache/**
 dist
 .DS_Store
 .swc
+.pnpm-store
