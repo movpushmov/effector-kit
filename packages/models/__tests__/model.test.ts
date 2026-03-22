@@ -363,3 +363,111 @@ describe("instance creation", () => {
     expect(instances["3"]).toMatchObject({ n: 30 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// instance deletion
+// ---------------------------------------------------------------------------
+
+describe("instance deletion", () => {
+  test("delete removes existing instance from $instances", () => {
+    const m = model({
+      contract: contract({ value: define.store(define.static<number>(), 0) })(),
+      fn: ({ value }) => ({ value }),
+    });
+
+    m.create({ id: "a", data: { value: 1 } });
+    m.create({ id: "b", data: { value: 2 } });
+
+    m.delete("a");
+
+    const instances = m.$instances.getState();
+    expect(Object.keys(instances)).toHaveLength(1);
+    expect(instances["a"]).toBeUndefined();
+    expect(instances["b"]).toMatchObject({ value: 2 });
+  });
+
+  test("delete with unknown id keeps instances unchanged", () => {
+    const m = model({
+      contract: contract({ value: define.store(define.static<number>(), 0) })(),
+      fn: ({ value }) => ({ value }),
+    });
+
+    m.create({ id: "x", data: { value: 10 } });
+    m.create({ id: "y", data: { value: 20 } });
+
+    m.delete("missing");
+
+    expect(m.$instances.getState()).toMatchObject({
+      x: { value: 10 },
+      y: { value: 20 },
+    });
+  });
+
+  test("delete all instances one by one leaves $instances empty", () => {
+    const m = model({
+      contract: contract({ n: define.store(define.static<number>(), 0) })(),
+      fn: ({ n }) => ({ n }),
+    });
+
+    m.create({ id: "1", data: { n: 10 } });
+    m.create({ id: "2", data: { n: 20 } });
+    m.create({ id: "3", data: { n: 30 } });
+
+    m.delete("2");
+    m.delete("1");
+    m.delete("3");
+
+    expect(m.$instances.getState()).toEqual({});
+  });
+
+  test("instance deletion via fork does not affect global $instances", async () => {
+    const m = model({
+      contract: contract({ x: define.store(define.static<number>(), 0) })(),
+      fn: ({ x }) => ({ x }),
+    });
+
+    m.create({ id: "shared", data: { x: 5 } });
+
+    const scope = fork();
+
+    await allSettled(m.delete, {
+      scope,
+      params: "shared",
+    });
+
+    // Global state should not be changed
+    expect(m.$instances.getState()).toMatchObject({
+      shared: { x: 5 },
+    });
+    // Scope should have deletion result
+    expect(scope.getState(m.$instances)).toEqual({});
+  });
+
+  test("two forks with same model delete independently", async () => {
+    const m = model({
+      contract: contract({
+        label: define.store(define.static<string>(), ""),
+      })(),
+      fn: ({ label }) => ({ label }),
+    });
+
+    const scope1 = fork();
+    const scope2 = fork();
+
+    await allSettled(m.create, {
+      scope: scope1,
+      params: { id: "same-id", data: { label: "scope-1" } },
+    });
+    await allSettled(m.create, {
+      scope: scope2,
+      params: { id: "same-id", data: { label: "scope-2" } },
+    });
+
+    await allSettled(m.delete, { scope: scope1, params: "same-id" });
+
+    expect(scope1.getState(m.$instances)["same-id"]).toBeUndefined();
+    expect(scope2.getState(m.$instances)["same-id"]).toMatchObject({
+      label: "scope-2",
+    });
+  });
+});

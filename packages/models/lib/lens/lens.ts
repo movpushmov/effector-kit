@@ -5,6 +5,7 @@ import {
   launch,
   sample,
   type Event,
+  type EventCallable,
 } from "effector";
 import { type Model, type ModelApi } from "../models";
 import type {
@@ -200,6 +201,22 @@ function buildLensCore(getInstances: () => Record<string, any>) {
   };
 }
 
+function createLensDeleteEvent(
+  getSource: () => Record<string, any>,
+  deleteById: EventCallable<string>,
+) {
+  const deleteEvent = createEvent<void>();
+
+  const deleteFx = createEffect(() => {
+    for (const id of Object.keys(getSource())) {
+      launch(deleteById, id);
+    }
+  });
+
+  sample({ clock: deleteEvent, target: deleteFx });
+  return deleteEvent;
+}
+
 // ---- Union helpers ----
 
 /**
@@ -267,6 +284,20 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
         activeKeys = keys;
         return lensObj;
       },
+      delete() {
+        const deleteEvent = createEvent<void>();
+        const deleteFx = createEffect(() => {
+          for (const entity of Object.values(getSource())) {
+            const variantKey = entity["~model"];
+            const m = unionInput.models[variantKey];
+            if (m) {
+              launch(m.delete, (entity).id);
+            }
+          }
+        });
+        sample({ clock: deleteEvent, target: deleteFx });
+        return deleteEvent;
+      },
       match(config: Record<string, (subLens: any) => any>) {
         const units: any[] = [];
 
@@ -308,6 +339,9 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
             last() {
               subPredicates.push(basePredicates.last);
               return subLens;
+            },
+            delete() {
+              return createLensDeleteEvent(getSubSource, variantModel.delete);
             },
             ...exportModelApi(
               variantModel,
@@ -386,6 +420,9 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
     last() {
       predicates.push(basePredicates.last);
       return lensObj;
+    },
+    delete() {
+      return createLensDeleteEvent(getSource, model.delete);
     },
     ...exportModelApi(model, () => predicates),
   };
