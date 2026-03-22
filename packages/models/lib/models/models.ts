@@ -27,7 +27,8 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
   const $instances =
     instances ?? createStore<Instances<T>>({}, { sid: `$instances/${sid}` });
 
-  const create = createEvent<CreateInstancePayload<T>>();
+  const createInstance = createEvent<CreateInstancePayload<T>>();
+  const deleteInstance = createEvent<string>();
 
   const { result: modelApi } = modifyDeclarations(() => {
     const api = createApi(contract);
@@ -36,7 +37,7 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
   });
 
   sample({
-    clock: create,
+    clock: createInstance,
     source: $instances,
     fn: (instances, { id, data }) => ({
       ...instances,
@@ -46,6 +47,16 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
     }),
     target: $instances,
   });
+
+  sample({
+    clock: deleteInstance,
+    source: $instances,
+    fn: (instances, id) => {
+      const { [id]: _, ...rest } = instances;
+      return rest;
+    },
+    target: $instances,
+  })
 
   const builtModel = {
     "~kind": "model",
@@ -58,7 +69,8 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
 
     $instances,
 
-    create,
+    create: createInstance,
+    delete: deleteInstance,
   };
 
   return Object.assign(builtModel, {

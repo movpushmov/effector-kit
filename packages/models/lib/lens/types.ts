@@ -59,6 +59,7 @@ type LensApi<Input extends Model<any, any>, Props = never> = {
   ): Lens<Input, Props>;
   first(): Lens<Input, Props>;
   last(): Lens<Input, Props>;
+  delete(): EventCallable<void>;
 };
 
 // ---- Union lens types ----
@@ -135,6 +136,7 @@ export type UnionLens<
           ctx: MatchCtx<U, Keys>,
         ) => boolean,
   ): UnionLens<U, Keys, Props>;
+  delete(): EventCallable<void>;
   match<
     Config extends {
       [K in Keys]?: (

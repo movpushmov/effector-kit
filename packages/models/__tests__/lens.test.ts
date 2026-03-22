@@ -206,6 +206,76 @@ describe("lens.where() filtering via scope", () => {
 });
 
 // ---------------------------------------------------------------------------
+// lens.delete()
+// ---------------------------------------------------------------------------
+
+describe("lens.delete() via scope", () => {
+  test("removes instances matching where()", async () => {
+    const m = makeTagged();
+    const trigger = createEvent<void>();
+    sample({ clock: trigger, target: m.lens.where(({ tag }) => tag === "a").delete() });
+
+    m.create({ id: "1", data: { tag: "a", value: 0 } });
+    m.create({ id: "2", data: { tag: "b", value: 0 } });
+    m.create({ id: "3", data: { tag: "a", value: 0 } });
+
+    const scope = forkWithInstances(m);
+    await allSettled(trigger, { scope });
+
+    const instances = scope.getState(m.$instances);
+    expect(instances["1"]).toBeUndefined();
+    expect(instances["3"]).toBeUndefined();
+    expect(instances["2"]?.tag).toBe("b");
+  });
+
+  test("without where removes all instances", async () => {
+    const m = makeCounter();
+    const trigger = createEvent<void>();
+    sample({ clock: trigger, target: m.lens.delete() });
+
+    m.create({ id: "x", data: { count: 1 } });
+    m.create({ id: "y", data: { count: 2 } });
+
+    const scope = forkWithInstances(m);
+    await allSettled(trigger, { scope });
+
+    expect(scope.getState(m.$instances)).toEqual({});
+  });
+
+  test("first().delete() removes a single instance", async () => {
+    const m = makeCounter();
+    const trigger = createEvent<void>();
+    sample({ clock: trigger, target: m.lens.first().delete() });
+
+    m.create({ id: "a", data: { count: 0 } });
+    m.create({ id: "b", data: { count: 0 } });
+
+    const scope = forkWithInstances(m);
+    await allSettled(trigger, { scope });
+
+    const instances = scope.getState(m.$instances);
+    expect(Object.keys(instances)).toHaveLength(1);
+    expect(instances["b"]).toBeDefined();
+  });
+
+  test("matching no instances is a no-op", async () => {
+    const m = makeTagged();
+    const trigger = createEvent<void>();
+    sample({
+      clock: trigger,
+      target: m.lens.where(({ tag }) => tag === "b").delete(),
+    });
+
+    m.create({ id: "1", data: { tag: "a", value: 0 } });
+
+    const scope = forkWithInstances(m);
+    await allSettled(trigger, { scope });
+
+    expect(scope.getState(m.$instances)["1"]?.tag).toBe("a");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // lens.first() / lens.last()
 // ---------------------------------------------------------------------------
 

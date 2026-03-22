@@ -6,6 +6,7 @@ import {
   sample,
   type Event,
   type StoreWritable,
+  type EventCallable,
 } from "effector";
 import { type Model, type ModelApi } from "../models";
 import type {
@@ -203,6 +204,22 @@ function buildLensCore(getInstances: () => Record<string, any>) {
   };
 }
 
+function createLensDeleteEvent(
+  getSource: () => Record<string, any>,
+  deleteById: EventCallable<string>,
+) {
+  const deleteEvent = createEvent<void>();
+
+  const deleteFx = createEffect(() => {
+    for (const id of Object.keys(getSource())) {
+      launch(deleteById, id);
+    }
+  });
+
+  sample({ clock: deleteEvent, target: deleteFx });
+  return deleteEvent;
+}
+
 // ---- Union helpers ----
 
 /**
@@ -271,30 +288,19 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
         activeKeys = keys;
         return lensObj;
       },
-      remove() {
-        const removeEvent = createEvent<void>();
-
-        for (const [key, m] of Object.entries(unionInput.models)) {
-          sample({
-            clock: removeEvent,
-            source: m.$instances as unknown as StoreWritable<any>,
-            fn: (current: any) => {
-              const filtered = getSource();
-              const updates: Record<string, any> = {};
-
-              for (const [id, data] of Object.entries(current)) {
-                const keep = !Object.values(filtered).some(
-                  (entity: any) => entity["~model"] === key && entity.id === id,
-                );
-                if (keep) updates[id] = data;
-              }
-              return updates;
-            },
-            target: m.$instances as unknown as StoreWritable<any>,
-          });
-        }
-
-        return removeEvent;
+      delete() {
+        const deleteEvent = createEvent<void>();
+        const deleteFx = createEffect(() => {
+          for (const entity of Object.values(getSource())) {
+            const variantKey = entity["~model"];
+            const m = unionInput.models[variantKey];
+            if (m) {
+              launch(m.delete, entity.id);
+            }
+          }
+        });
+        sample({ clock: deleteEvent, target: deleteFx });
+        return deleteEvent;
       },
       match(config: Record<string, (subLens: any) => any>) {
         const units: any[] = [];
@@ -338,28 +344,8 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
               subPredicates.push(basePredicates.last);
               return subLens;
             },
-            remove() {
-              const removeEvent = createEvent<void>();
-
-              sample({
-                clock: removeEvent,
-                source:
-                  variantModel.$instances as unknown as StoreWritable<any>,
-                fn: (current: any) => {
-                  const filtered = getSubSource();
-                  const updates: Record<string, any> = {};
-
-                  for (const [id, data] of Object.entries(current)) {
-                    const keep = !Object.keys(filtered).includes(id);
-                    if (keep) updates[id] = data;
-                  }
-                  return updates;
-                },
-                target:
-                  variantModel.$instances as unknown as StoreWritable<any>,
-              });
-
-              return removeEvent;
+            delete() {
+              return createLensDeleteEvent(getSubSource, variantModel.delete);
             },
             ...exportModelApi(
               variantModel,
@@ -441,26 +427,8 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
       predicates.push(basePredicates.last);
       return lensObj;
     },
-    remove() {
-      const removeEvent = createEvent<void>();
-
-      sample({
-        clock: removeEvent,
-        source: model.$instances as unknown as StoreWritable<any>,
-        fn: (current: any) => {
-          const filtered = getSource();
-          const updates: Record<string, any> = {};
-
-          for (const [id, data] of Object.entries(current)) {
-            const keep = !Object.keys(filtered).includes(id);
-            if (keep) updates[id] = data;
-          }
-          return updates;
-        },
-        target: model.$instances as unknown as StoreWritable<any>,
-      });
-
-      return removeEvent;
+    delete() {
+      return createLensDeleteEvent(getSource, model.delete);
     },
     ...exportModelApi(
       model,

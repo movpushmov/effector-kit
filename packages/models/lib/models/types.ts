@@ -75,6 +75,7 @@ export interface Model<T extends Contract<any>, Api extends ModelApi> {
 
   $instances: Store<Record<string, BaseInstance & ContractData<T>>>;
   create: EventCallable<CreateInstancePayload<T>>;
+  delete: EventCallable<string>;
 
   lens: Lens<Model<T, Api>> & LensProps<Model<T, Api>>;
 
