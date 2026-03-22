@@ -4,11 +4,12 @@ import { lens } from "../lens";
 import type { Ref } from "./types";
 import { is as modelIs } from "../is";
 import type { Union, UnionMap } from "../union";
+import { modifyRefsStore } from "../runtime";
 
 export function ref<T extends Union<UnionMap>>(union: T): Ref<T>;
 export function ref<T extends Model<any, any>>(model: T): Ref<T>;
 export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
-  const refSid = Math.random().toString(36).slice(2);
+  const refSid = createStore(null).sid;
   const patchedLens = lens(input as any);
 
   if (modelIs.union(input)) {
@@ -68,6 +69,7 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
 
   // Store plain string IDs — JSON-serializable for SSR hydration.
   const $ids = createStore<string[]>([], { sid: `$ref/${refSid}` });
+  modifyRefsStore($ids);
 
   Object.defineProperty(patchedLens, "getSource", {
     configurable: true,

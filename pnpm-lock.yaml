@@ -61,6 +61,22 @@ importers:
       '@effector-kit/models':
         specifier: workspace:*
         version: link:../models
+      effector:
+        specifier: '>=23.4.4'
+        version: 23.4.4
+      effector-action:
+        specifier: '>=1.2.2'
+        version: 1.2.2(effector@23.4.4)(patronum@2.3.0(effector@23.4.4))
+      effector-react:
+        specifier: '>=23.3.0'
+        version: 23.3.0(effector@23.4.4)(react@18.3.1)
+      react:
+        specifier: '>=18.0.0'
+        version: 18.3.1
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
 
 packages:
 
@@ -884,6 +900,9 @@ packages:
   '@types/mdurl@2.0.0':
     resolution: {integrity: sha512-RGdgjQUZba5p6QEFAVx2OGb8rQDL/cPRG7GiedRzMcJ1tYnUANBncjbSB1NRGwbvjcPeikRABz2nshyPk1bhWg==}
 
+  '@types/react@19.2.14':
+    resolution: {integrity: sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==}
+
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
@@ -1098,6 +1117,13 @@ packages:
     peerDependencies:
       effector: '>=23'
       patronum: '>=2.1.0'
+
+  effector-react@23.3.0:
+    resolution: {integrity: sha512-QR0+x1EnbiWhO80Yc0GVF+I9xCYoxBm3t+QLB5Wg+1uY1Q1BrSWDmKvJaJJZ/+9BU4RAr25yS5J2EkdWnicu8g==}
+    engines: {node: '>=11.0.0'}
+    peerDependencies:
+      effector: ^23.0.0
+      react: '>=16.8.0 <20.0.0'
 
   effector@23.4.4:
     resolution: {integrity: sha512-QkZboRN28K/iwxigDhlJcI3ux3aNbt8kYGGH/GkqWG0OlGeyuBhb7PdM89Iu+ogV8Lmz16xIlwnXR2UNWI6psg==}
@@ -1446,6 +1472,11 @@ packages:
     peerDependenciesMeta:
       synckit:
         optional: true
+
+  use-sync-external-store@1.6.0:
+    resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   vfile-message@4.0.3:
     resolution: {integrity: sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw==}
@@ -2222,6 +2253,10 @@ snapshots:
 
   '@types/mdurl@2.0.0': {}
 
+  '@types/react@19.2.14':
+    dependencies:
+      csstype: 3.2.3
+
   '@types/unist@3.0.3': {}
 
   '@types/web-bluetooth@0.0.21': {}
@@ -2439,6 +2474,12 @@ snapshots:
       effector: 23.4.4
       patronum: 2.3.0(effector@23.4.4)
 
+  effector-react@23.3.0(effector@23.4.4)(react@18.3.1):
+    dependencies:
+      effector: 23.4.4
+      react: 18.3.1
+      use-sync-external-store: 1.6.0(react@18.3.1)
+
   effector@23.4.4: {}
 
   emoji-regex-xs@1.0.0: {}
@@ -2557,8 +2598,7 @@ snapshots:
 
   is-what@5.5.0: {}
 
-  js-tokens@4.0.0:
-    optional: true
+  js-tokens@4.0.0: {}
 
   jsesc@3.1.0: {}
 
@@ -2567,7 +2607,6 @@ snapshots:
   loose-envify@1.4.0:
     dependencies:
       js-tokens: 4.0.0
-    optional: true
 
   magic-string@0.30.21:
     dependencies:
@@ -2645,7 +2684,6 @@ snapshots:
   react@18.3.1:
     dependencies:
       loose-envify: 1.4.0
-    optional: true
 
   regex-recursion@6.0.2:
     dependencies:
@@ -2853,6 +2891,10 @@ snapshots:
   unrun@0.2.26:
     dependencies:
       rolldown: 1.0.0-rc.1
+
+  use-sync-external-store@1.6.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   vfile-message@4.0.3:
     dependencies:

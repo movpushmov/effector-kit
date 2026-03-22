@@ -5,6 +5,7 @@ import {
   launch,
   sample,
   type Event,
+  type StoreWritable,
 } from "effector";
 import { type Model, type ModelApi } from "../models";
 import type {
@@ -15,7 +16,7 @@ import type {
   ModelLensApi,
   UnionLens,
 } from "./types";
-import { getContext, setContext } from "../runtime";
+import { getContext, setContext, setTarget } from "../runtime";
 import { is as modelIs } from "../is";
 import type { Union, UnionMap } from "../union";
 
@@ -83,6 +84,7 @@ function exportModelApi<T extends Model<any, ModelApi>>(
   model: T,
   getPredicates: () => LensPredicate[],
   getInstances: () => Record<string, any> = () => model.$instances.getState(),
+  getTarget: () => Model<any, any>,
 ): ModelLensApi<T, any> {
   const lensApi: any = {};
 
@@ -153,6 +155,7 @@ function exportModelApi<T extends Model<any, ModelApi>>(
 
               for (const instance of Object.values(instances)) {
                 setContext({ current: { model, instance } });
+                setTarget(getTarget());
 
                 if (capturedScope && storeRootId) {
                   const stateRef = capturedScope.reg[storeRootId];
@@ -232,6 +235,7 @@ function makeMatchCtx(entity: any, models: UnionMap): MatchCtx<any> {
       const handler = config[entity["~model"]];
       return handler ? handler(entity) : undefined;
     },
+    // @ts-expect-error
     uniqueId(variantKey: string, id: string): string {
       return `${models[variantKey]?.["~id"] ?? variantKey}:${id}`;
     },
@@ -242,7 +246,7 @@ function makeMatchCtx(entity: any, models: UnionMap): MatchCtx<any> {
 
 export function lens<T extends Union<UnionMap>>(
   input: T,
-): UnionLens<T, keyof T["models"]>;
+): UnionLens<T, keyof T["models"]> & LensProps<T>;
 export function lens<T extends Model<any, any>>(
   model: T,
 ): Lens<T> & LensProps<T>;
@@ -266,6 +270,31 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
       only(...keys: string[]) {
         activeKeys = keys;
         return lensObj;
+      },
+      remove() {
+        const removeEvent = createEvent<void>();
+
+        for (const [key, m] of Object.entries(unionInput.models)) {
+          sample({
+            clock: removeEvent,
+            source: m.$instances as unknown as StoreWritable<any>,
+            fn: (current: any) => {
+              const filtered = getSource();
+              const updates: Record<string, any> = {};
+
+              for (const [id, data] of Object.entries(current)) {
+                const keep = !Object.values(filtered).some(
+                  (entity: any) => entity["~model"] === key && entity.id === id,
+                );
+                if (keep) updates[id] = data;
+              }
+              return updates;
+            },
+            target: m.$instances as unknown as StoreWritable<any>,
+          });
+        }
+
+        return removeEvent;
       },
       match(config: Record<string, (subLens: any) => any>) {
         const units: any[] = [];
@@ -309,10 +338,34 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
               subPredicates.push(basePredicates.last);
               return subLens;
             },
+            remove() {
+              const removeEvent = createEvent<void>();
+
+              sample({
+                clock: removeEvent,
+                source:
+                  variantModel.$instances as unknown as StoreWritable<any>,
+                fn: (current: any) => {
+                  const filtered = getSubSource();
+                  const updates: Record<string, any> = {};
+
+                  for (const [id, data] of Object.entries(current)) {
+                    const keep = !Object.keys(filtered).includes(id);
+                    if (keep) updates[id] = data;
+                  }
+                  return updates;
+                },
+                target:
+                  variantModel.$instances as unknown as StoreWritable<any>,
+              });
+
+              return removeEvent;
+            },
             ...exportModelApi(
               variantModel,
               () => subPredicates,
               getKeyInstances,
+              () => variantModel,
             ),
           };
 
@@ -354,6 +407,7 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
           }
           return result;
         },
+        () => model,
       );
     }
 
@@ -387,7 +441,33 @@ export function lens(input: Union<UnionMap> | Model<any, any>): any {
       predicates.push(basePredicates.last);
       return lensObj;
     },
-    ...exportModelApi(model, () => predicates),
+    remove() {
+      const removeEvent = createEvent<void>();
+
+      sample({
+        clock: removeEvent,
+        source: model.$instances as unknown as StoreWritable<any>,
+        fn: (current: any) => {
+          const filtered = getSource();
+          const updates: Record<string, any> = {};
+
+          for (const [id, data] of Object.entries(current)) {
+            const keep = !Object.keys(filtered).includes(id);
+            if (keep) updates[id] = data;
+          }
+          return updates;
+        },
+        target: model.$instances as unknown as StoreWritable<any>,
+      });
+
+      return removeEvent;
+    },
+    ...exportModelApi(
+      model,
+      () => predicates,
+      undefined,
+      () => model,
+    ),
   };
 
   Object.defineProperty(lensObj, "getSource", {

@@ -43,7 +43,7 @@ export type ModelLensApi<InputModel extends Model<any, any>, Props> = {
   >;
 };
 
-export type LensProps<InputModel extends Model<any, any>> = {
+export type LensProps<InputModel extends Model<any, any> | Union<UnionMap>> = {
   props<T>(): Lens<InputModel, T>;
 };
 

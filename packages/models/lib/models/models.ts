@@ -23,7 +23,7 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
   fn,
   instances,
 }: ModelOptions<T, Api>): Model<T, Api> {
-  const sid = Math.random().toString(36).slice(2);
+  const sid = createStore(null).sid;
   const $instances =
     instances ?? createStore<Instances<T>>({}, { sid: `$instances/${sid}` });
 
@@ -54,7 +54,7 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
     "~fn": fn,
 
     // TODO: support effector babel plugin!
-    "~id": Math.random().toString(),
+    "~id": sid,
 
     $instances,
 
