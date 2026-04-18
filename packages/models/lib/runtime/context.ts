@@ -10,3 +10,11 @@ export function getContext(): RuntimeContext {
 export function setContext(ctx: RuntimeContext): void {
   runtimeContext = ctx;
 }
+
+export function setTarget(target: Model<any, any>): void {
+  if (!runtimeContext.current) {
+    throw new Error("Context not found");
+  }
+
+  runtimeContext.current.target = target;
+}

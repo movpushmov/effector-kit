@@ -1,5 +1,5 @@
 import type { EventCallable, StoreWritable } from "effector";
-import type { Lens } from "../lens";
+import type { Lens, LensProps } from "../lens";
 import type { Model } from "../models";
 import type { Union, UnionMap } from "../union";
 
@@ -18,5 +18,7 @@ type RefOps<T extends Model<any, any> | Union<UnionMap>> =
 
 export type Ref<T extends Model<any, any> | Union<UnionMap>> = {
   "~kind": "ref";
-  lens: Lens<T>;
+  "~id": string;
+  "~target": T;
+  lens: Lens<T> & LensProps<T>;
 } & RefOps<T>;

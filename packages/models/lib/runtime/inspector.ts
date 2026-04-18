@@ -7,6 +7,7 @@ import {
   type Stack,
 } from "effector";
 import { getContext, setContext } from "./context";
+import { syncReservedStores } from "./api";
 import type { RuntimeContext } from "./types";
 
 type Fn<T> = () => T;
@@ -66,9 +67,7 @@ function modifyRegion(node: Node) {
           const context = getRuntimeContext(stack);
 
           if (!context.current) {
-            throw new Error(
-              "Panic: Cannot call model unit without instance runtime context",
-            );
+            return data;
           }
 
           context.current.scope = stack.scope;
@@ -85,6 +84,7 @@ function modifyRegion(node: Node) {
               { current: any }
             >;
             primeStoreScopes(context, scopeReg);
+            syncReservedStores(scopeReg);
           }
 
           return data;

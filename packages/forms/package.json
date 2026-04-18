@@ -45,24 +45,13 @@
     "./zod": {
       "import": "./dist/zod.js",
       "require": "./dist/zod.cjs"
-    },
-    "./next": {
-      "import": "./dist/next.js",
-      "require": "./dist/next.cjs"
-    },
-    "./react-next": {
-      "import": "./dist/react-next.js",
-      "require": "./dist/react-next.cjs"
     }
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/movpushmov/effector-kit.git"
   },
-  "scripts": {
-    "build": "vite build",
-    "test": "vitest run"
-  },
+  "scripts": {},
   "bugs": {
     "url": "https://github.com/movpushmov/effector-kit/issues"
   },
@@ -73,7 +62,8 @@
     "zod": ">=4"
   },
   "dependencies": {
-    "fast-deep-equal": "^3.1.3"
+    "fast-deep-equal": "^3.1.3",
+    "@effector-kit/models": "workspace:*"
   },
   "packageManager": "pnpm@10.10.0"
 }

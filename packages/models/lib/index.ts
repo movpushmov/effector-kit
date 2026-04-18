@@ -8,9 +8,37 @@ export { child } from "./child";
 export { union } from "./union";
 
 export { is } from "./is";
+export { withInstanceContext, getContext } from "./runtime";
 
 export type { Model, ModelApi, ContractData, ContractApi } from "./models";
 export type { Ref } from "./ref";
 export type { Lens } from "./lens";
 export type { Union, UnionMap } from "./union";
-export type { Contract, Shape, ShapeElement } from "./contracts";
+export type {
+  Contract,
+  Shape,
+  ShapeElement,
+  RefElement,
+  EventElement,
+  ChildElement,
+  StoreElement,
+} from "./contracts";
+
+export type {
+  TArray,
+  TBoolean,
+  TCall,
+  TEnum,
+  TFunction,
+  TIntersect,
+  TNull,
+  TNumber,
+  TObject,
+  TRecord,
+  TRef,
+  TSchema,
+  TStatic,
+  TString,
+  TUnion,
+  TVoid,
+} from "./type-schema";

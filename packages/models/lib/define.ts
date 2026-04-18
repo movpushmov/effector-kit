@@ -1,31 +1,19 @@
-import type { HKT } from "./hkt";
 import type {
   ChildElement,
   EventElement,
-  ExtractTypeFromElement,
-  GenericElement,
   RefElement,
-  StaticElement,
   StoreElement,
-  TypeElement,
 } from "./contracts";
-import type { TypeElementHKT } from "./contracts/types";
 import type { Model } from "./models";
+import type { Static, TSchema } from "./type-schema";
 
 export const define = {
-  store<Type extends TypeElement>(
-    _: Type,
-    storeValue: [ExtractTypeFromElement<Type>] extends [never]
-      ? unknown
-      : ExtractTypeFromElement<Type>,
-  ): HKT.WithParameter<StoreElement, TypeElementHKT, Type> {
+  store<T extends TSchema>(_schema: T, storeValue: Static<T>): StoreElement<T> {
     // @ts-expect-error
     return { "~kind": "store", defaultValue: storeValue };
   },
 
-  event<Type extends TypeElement>(
-    _: Type,
-  ): HKT.WithParameter<EventElement, TypeElementHKT, Type> {
+  event<T extends TSchema>(_schema: T): EventElement<T> {
     // @ts-expect-error
     return { "~kind": "event" };
   },
@@ -38,11 +26,7 @@ export const define = {
     return { "~kind": "ref", model };
   },
 
-  generic<Name extends string>(): GenericElement & { "~name"?: Name } {
-    return { "~kind": "generic" };
-  },
-
-  static<T>(): StaticElement<T> {
-    return { "~kind": "static" };
+  schema<T extends TSchema>(): T {
+    return null as any;
   },
 };

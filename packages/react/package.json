@@ -1,0 +1,68 @@
+{
+  "name": "@effector-kit/react",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "private": false,
+  "version": "0.16.0",
+  "description": "Effector React kit",
+  "keywords": [
+    "effector",
+    "kit",
+    "effector-kit",
+    "react",
+    "components",
+    "dynamic"
+  ],
+  "author": "movpushmov",
+  "homepage": "https://github.com/movpushmov/effector-kit#readme",
+  "license": "MIT",
+  "directories": {
+    "lib": "lib"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/movpushmov/effector-kit.git"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run ./__tests__",
+    "typecheck": "tsc --noEmit"
+  },
+  "bugs": {
+    "url": "https://github.com/movpushmov/effector-kit/issues"
+  },
+  "dependencies": {
+    "@effector-kit/models": "workspace:*"
+  },
+  "peerDependencies": {
+    "effector": ">=23.4.4",
+    "react": ">=18"
+  },
+  "packageManager": "pnpm@10.10.0",
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.14",
+    "effector": "23.4.4",
+    "effector-react": "^23.3.0",
+    "jsdom": "^29.0.2",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-test-renderer": "^19.2.5"
+  }
+}

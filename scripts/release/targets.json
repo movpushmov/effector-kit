@@ -1,0 +1,6 @@
+{
+  "packages": [
+    "@effector-kit/models",
+    "@effector-kit/react"
+  ]
+}
