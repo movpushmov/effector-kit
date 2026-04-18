@@ -18,9 +18,9 @@ type WatchableUnitActions<T> = {
 };
 
 type TargetableUnitActions<T, Props = never> = WatchableUnitActions<T> & {
-  target: [Props] extends [never]
-    ? () => EventCallable<T>
-    : (map: (props: Props) => T) => EventCallable<Props>;
+  target: (
+    map?: (props: Props) => T,
+  ) => EventCallable<[Props] extends [never] ? T : Props>;
 };
 
 type ModelLensElement<Element extends ModelApiElement, Props = never> =
@@ -75,41 +75,12 @@ type UnionEntityData<
   };
 }[Keys];
 
-export type MatchConfig<
-  U extends Union<UnionMap>,
-  Keys extends keyof U["models"] = keyof U["models"],
-  R = any,
-> = Partial<{
-  [K in Keys]: (data: ContractData<U["models"][K]["~contract"]>) => R;
-}>;
-
-export type MatchCtx<
-  U extends Union<UnionMap>,
-  Keys extends keyof U["models"] = keyof U["models"],
-> = {
-  match<R>(config: MatchConfig<U, Keys, R>): R | undefined;
-  /**
-   * Returns the internal namespaced key used by the union lens for a given
-   * variant + original id pair: `"${variantKey}:${id}"`.
-   *
-   * Useful when you need to look up or compare the exact key that the union
-   * produces so that `where` predicates can filter by the same unique
-   * identifier that ref tracking or external maps use.
-   *
-   * @example
-   * where((entity, _, ctx) => ctx.uniqueId('a', entity.id) === myTrackedKey)
-   */
-  uniqueId<K extends Keys>(variantKey: K, id: string): string;
-};
-
 /**
  * Lens over a union of models.
  *
  * - `only(...keys)` – narrows to a subset of variants; only those keys'
  *   model APIs are accessible on the resulting lens.
- * - `where(predicate)` – filters instances; the predicate receives each
- *   entity tagged with `"~model"` and an optional `ctx` for variant-aware
- *   matching via `ctx.match(config)`.
+ * - `where(predicate)` – filters instances by tagged union entity.
  * - `[K in Keys]` – direct access to each active variant's model API,
  *   e.g. `lens.a.increment.target()` dispatches only to filtered modelA
  *   instances.
@@ -128,15 +99,24 @@ export type UnionLens<
       ? (
           entity: UnionEntityData<U, Keys>,
           _?: undefined,
-          ctx?: MatchCtx<U, Keys>,
+          ctx?: {
+            match(config: Partial<Record<Keys, (data: any) => any>>): any;
+            uniqueId<K extends Keys>(variantKey: K, id: string): string;
+          },
         ) => boolean
       : (
           entity: UnionEntityData<U, Keys>,
           props: Props,
-          ctx: MatchCtx<U, Keys>,
+          ctx: {
+            match(config: Partial<Record<Keys, (data: any) => any>>): any;
+            uniqueId<K extends Keys>(variantKey: K, id: string): string;
+          },
         ) => boolean,
   ): UnionLens<U, Keys, Props>;
+  first(): UnionLens<U, Keys, Props>;
+  last(): UnionLens<U, Keys, Props>;
   delete(): EventCallable<void>;
+  uniqueId<K extends Keys>(variantKey: K, id: string): string;
   match<
     Config extends {
       [K in Keys]?: (

@@ -18,5 +18,7 @@ type RefOps<T extends Model<any, any> | Union<UnionMap>> =
 
 export type Ref<T extends Model<any, any> | Union<UnionMap>> = {
   "~kind": "ref";
+  "~id": string;
+  "~target": T;
   lens: Lens<T> & LensProps<T>;
 } & RefOps<T>;

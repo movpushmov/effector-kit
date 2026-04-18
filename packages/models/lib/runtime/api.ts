@@ -3,6 +3,14 @@ import { getContext } from "./context";
 import type { Model, BaseInstance } from "../models";
 import { createAction } from "effector-action";
 
+let entityIdCounter = 0;
+const reservedStores = new Set<StoreWritable<any>>();
+
+export function getEntityId(): string {
+  entityIdCounter += 1;
+  return `model-${entityIdCounter}`;
+}
+
 export function modifyStore($store: StoreWritable<any>, key: string): void {
   Object.defineProperty(($store as any).graphite.meta.stateRef, "current", {
     get() {
@@ -37,7 +45,10 @@ export function modifyStore($store: StoreWritable<any>, key: string): void {
   });
 }
 
-export function modifyRefsStore($store: StoreWritable<any>): void {
+export function modifyRefsStore(
+  $store: StoreWritable<any>,
+  refId: string,
+): void {
   reserve([$store]);
   Object.defineProperty(($store as any).graphite.meta.stateRef, "current", {
     get() {
@@ -47,17 +58,13 @@ export function modifyRefsStore($store: StoreWritable<any>): void {
         return null;
       }
 
-      const instance: BaseInstance = ctx.current.instance;
+      const instance: BaseInstance =
+        ctx.current.owner?.instance ?? ctx.current.instance;
 
       if (!instance["~refs"]) {
         instance["~refs"] = {};
       }
-
-      if (!ctx.current.target) {
-        return null;
-      }
-
-      return instance["~refs"][ctx.current.target["~id"]] ?? [];
+      return instance["~refs"][refId] ?? [];
     },
   });
 
@@ -77,15 +84,13 @@ export function modifyRefsStore($store: StoreWritable<any>): void {
           value;
       }
 
-      if (!ctx.current.instance["~refs"]) {
-        ctx.current.instance["~refs"] = {};
-      }
+      const instance: BaseInstance =
+        ctx.current.owner?.instance ?? ctx.current.instance;
 
-      if (!ctx.current.target) {
-        return null;
+      if (!instance["~refs"]) {
+        instance["~refs"] = {};
       }
-
-      ctx.current.instance["~refs"][ctx.current.target["~id"]] = value;
+      instance["~refs"][refId] = value;
     },
   });
 }
@@ -103,7 +108,8 @@ export function modifyChildStore(
         return null;
       }
 
-      const instance: BaseInstance = ctx.current.instance;
+      const instance: BaseInstance =
+        ctx.current.owner?.instance ?? ctx.current.instance;
 
       if (!instance["~children"]) {
         instance["~children"] = {};
@@ -129,11 +135,14 @@ export function modifyChildStore(
           value;
       }
 
-      if (!ctx.current.instance["~children"]) {
-        ctx.current.instance["~children"] = {};
+      const instance: BaseInstance =
+        ctx.current.owner?.instance ?? ctx.current.instance;
+
+      if (!instance["~children"]) {
+        instance["~children"] = {};
       }
 
-      ctx.current.instance["~children"][model["~id"]] = value;
+      instance["~children"][model["~id"]] = value;
     },
   });
 }
@@ -143,5 +152,33 @@ export function reserve(units: object[]): void {
     Object.defineProperty(unit, "~reserved", {
       value: true,
     });
+
+    if (
+      typeof unit === "object" &&
+      unit !== null &&
+      "graphite" in unit &&
+      (unit as any).graphite?.meta?.stateRef
+    ) {
+      reservedStores.add(unit as StoreWritable<any>);
+    }
+  }
+}
+
+export function syncReservedStores(
+  scopeReg: Record<string, { current: any }>,
+): void {
+  for (const $store of reservedStores) {
+    const rootId = ($store as any).graphite.meta.rootStateRefId;
+    const stateRef = ($store as any).graphite.meta.stateRef;
+    const currentValue = stateRef.current;
+
+    if (!scopeReg[rootId]) {
+      scopeReg[rootId] = Object.assign({}, stateRef, {
+        current: currentValue,
+      });
+      continue;
+    }
+
+    scopeReg[rootId].current = currentValue;
   }
 }

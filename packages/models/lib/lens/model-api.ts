@@ -1,0 +1,90 @@
+import { is } from "effector";
+import { is as modelIs } from "../is";
+import type { Model, ModelApi } from "../models";
+import type { ModelLensApi } from "./types";
+import { createClock, createTarget } from "./dispatch";
+import { lens } from "./lens";
+
+function collectNestedInstances(
+  parentInstances: Record<string, any>,
+  nestedModel: Model<any, any>,
+): Record<string, any> {
+  const result: Record<string, any> = {};
+
+  for (const [parentId, parentInstance] of Object.entries(parentInstances)) {
+    const children = parentInstance?.["~children"]?.[nestedModel["~id"]] ?? {};
+
+    for (const [childId, childInstance] of Object.entries(children)) {
+      if (typeof childInstance === "object" && childInstance !== null) {
+        Object.defineProperty(childInstance, "~owner", {
+          value: parentInstance,
+          configurable: true,
+          enumerable: false,
+          writable: true,
+        });
+      }
+
+      result[`${parentId}:${childId}`] = childInstance;
+    }
+  }
+
+  return result;
+}
+
+interface ModelApiOptions<T extends Model<any, ModelApi>> {
+  model: T;
+  getInstances: (payload: any) => Record<string, any>;
+  getTargetModel: () => Model<any, any>;
+}
+
+export function createModelLensApi<T extends Model<any, ModelApi>>({
+  model,
+  getInstances,
+  getTargetModel,
+}: ModelApiOptions<T>): ModelLensApi<T, any> {
+  const api: any = {};
+
+  for (const key in model["~api"]) {
+    const element = model["~api"][key];
+
+    if (!element) {
+      continue;
+    }
+
+    if (is.store(element) || is.event(element)) {
+      const actions: any = {
+        clock() {
+          return createClock(element as any, model, getInstances);
+        },
+      };
+
+      if (is.targetable(element)) {
+        actions.target = (map?: (payload: any) => any) =>
+          createTarget(
+            element as any,
+            model,
+            getInstances,
+            getTargetModel,
+            map,
+          );
+      }
+
+      api[key] = actions;
+      continue;
+    }
+
+    if (modelIs.model(element)) {
+      const nestedLens = lens(element);
+
+      (nestedLens as any)["~setSource"]?.({
+        source: element.$instances,
+        getSource: (payload: any) =>
+          collectNestedInstances(getInstances(payload), element),
+      });
+
+      api[key] = nestedLens;
+    }
+  }
+
+  return api;
+}

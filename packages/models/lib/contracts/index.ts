@@ -1,9 +1,5 @@
 export { contract } from "./contracts";
 export type {
-  ExtractTypeFromElement,
-  GenericElement,
-  StaticElement,
-  TypeElement,
   StoreElement,
   EventElement,
   ChildElement,

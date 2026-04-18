@@ -8,6 +8,7 @@ export { child } from "./child";
 export { union } from "./union";
 
 export { is } from "./is";
+export { withInstanceContext } from "./runtime";
 
 export type { Model, ModelApi, ContractData, ContractApi } from "./models";
 export type { Ref } from "./ref";
@@ -22,3 +23,22 @@ export type {
   ChildElement,
   StoreElement,
 } from "./contracts";
+
+export type {
+  TArray,
+  TBoolean,
+  TCall,
+  TEnum,
+  TFunction,
+  TIntersect,
+  TNull,
+  TNumber,
+  TObject,
+  TRecord,
+  TRef,
+  TSchema,
+  TStatic,
+  TString,
+  TUnion,
+  TVoid,
+} from "./type-schema";

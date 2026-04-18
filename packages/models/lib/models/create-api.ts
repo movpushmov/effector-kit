@@ -2,13 +2,11 @@ import {
   createEvent,
   createStore,
   type EventCallable,
-  type Store,
   type StoreWritable,
 } from "effector";
 import type { Contract, ShapeElement } from "../contracts";
 import type { ContractApi, ContractData } from "./types";
-import { getContext, modifyStore } from "../runtime";
-import { createAction } from "effector-action";
+import { modifyStore } from "../runtime";
 
 interface TransformContext {
   key: string;
@@ -34,10 +32,18 @@ function transform(
     switch (item?.["~kind"]) {
       case "store": {
         to[key] = api.onStore(item.defaultValue, { key });
+        Object.defineProperty(to[key], "~field", {
+          value: key,
+          configurable: true,
+        });
         break;
       }
       case "event": {
         to[key] = api.onEvent();
+        Object.defineProperty(to[key], "~field", {
+          value: key,
+          configurable: true,
+        });
         break;
       }
     }

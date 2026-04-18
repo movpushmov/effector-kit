@@ -38,7 +38,7 @@
     "url": "git+https://github.com/movpushmov/effector-kit.git"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "tsdown",
     "test": "vitest run"
   },
   "bugs": {
@@ -47,5 +47,20 @@
   "dependencies": {
     "@effector-kit/models": "workspace:*"
   },
-  "packageManager": "pnpm@10.10.0"
+  "peerDependencies": {
+    "effector": ">=23.4.4",
+    "react": ">=18"
+  },
+  "packageManager": "pnpm@10.10.0",
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.14",
+    "effector": "23.4.4",
+    "effector-react": "^23.3.0",
+    "jsdom": "^29.0.2",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-test-renderer": "^19.2.5"
+  }
 }

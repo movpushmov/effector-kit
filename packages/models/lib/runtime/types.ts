@@ -17,6 +17,7 @@ interface RuntimeContextInfo {
   model: Model<any, any>;
   target?: Model<any, any>;
   instance: any;
+  owner?: RuntimeContextInfo;
   scope?: Scope | undefined;
 }
 
