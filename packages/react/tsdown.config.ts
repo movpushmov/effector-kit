@@ -5,7 +5,14 @@ const config: UserConfig = defineConfig({
   entry: ["./lib/index.ts"],
   dts: true,
   format: ["esm", "cjs"],
-  external: ["effector", "effector-action", "react", "@effector-kit/models"],
+  external: [
+    "effector",
+    "effector-action",
+    "effector-react",
+    "react",
+    "react/jsx-runtime",
+    "@effector-kit/models",
+  ],
   plugins: [swc.rolldown()],
 });
 
