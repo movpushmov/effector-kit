@@ -5,7 +5,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "private": false,
-  "version": "0.16.0",
+  "version": "0.0.2",
   "description": "Effector React kit",
   "keywords": [
     "effector",
@@ -41,7 +41,13 @@
   "scripts": {
     "build": "tsdown",
     "test": "vitest run ./__tests__",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "changeset": "pnpm -w changeset",
+    "release:targets": "pnpm -w release:targets",
+    "release:verify": "pnpm -w release:verify",
+    "release:status": "pnpm -w release:status",
+    "release:version": "pnpm -w release:version",
+    "release:publish": "pnpm -w release:publish"
   },
   "bugs": {
     "url": "https://github.com/movpushmov/effector-kit/issues"

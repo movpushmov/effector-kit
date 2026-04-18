@@ -15,8 +15,16 @@
     "vitest": "^4.0.18"
   },
   "scripts": {
+    "changeset": "changeset",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "release:targets": "node ./scripts/release/run.mjs list",
+    "release:build": "node ./scripts/release/run.mjs build",
+    "release:test": "node ./scripts/release/run.mjs test",
+    "release:verify": "node ./scripts/release/run.mjs verify",
+    "release:status": "changeset status --verbose",
+    "release:version": "changeset version && pnpm install",
+    "release:publish": "pnpm release:verify && node ./scripts/release/publish.mjs"
   }
 }
