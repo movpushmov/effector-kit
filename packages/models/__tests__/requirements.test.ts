@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { child, contract, define, model, ref, union } from "../lib";
+import { lens } from "../lib/lens";
 import { type TBoolean, type TNumber, type TString } from "../lib/type-schema";
 import { allSettled, createEvent, fork, sample, type EventCallable } from "effector";
 
@@ -1336,6 +1337,27 @@ describe("models api", () => {
           c: { count: 50 },
         });
       });
+
+      test("filters model instances by ids without scanning the whole collection", async () => {
+        const scope = fork();
+
+        await createInstances(scope, counterModel.create, [
+          { id: "a", data: { count: 1 } },
+          { id: "b", data: { count: 2 } },
+          { id: "c", data: { count: 3 } },
+        ]);
+
+        await allSettled(counterModel.lens.ids("a", "c").setCount.target(), {
+          scope,
+          params: 60,
+        });
+
+        expect(scope.getState(counterModel.$instances)).toMatchObject({
+          a: { count: 60 },
+          b: { count: 2 },
+          c: { count: 60 },
+        });
+      });
     });
 
     describe("union lens", () => {
@@ -1700,6 +1722,50 @@ describe("models api", () => {
 
         expect(scope.getState(flaggedModel.$instances)).toMatchObject({
           f1: { score: 95 },
+        });
+      });
+
+      test("filters union instances by unique ids", async () => {
+        const scope = fork();
+
+        await createInstances(scope, counterModel.create, [
+          { id: "a", data: { count: 1 } },
+          { id: "b", data: { count: 2 } },
+        ]);
+
+        await createInstances(scope, flaggedModel.create, [
+          { id: "f1", data: { score: 3 } },
+        ]);
+
+        const selection = union({
+          counter: counterModel,
+          flagged: flaggedModel,
+        });
+        const selectionLens = lens(selection);
+
+        await allSettled(
+          selectionLens
+            .ids(
+              selectionLens.uniqueId("counter", "a"),
+              selectionLens.uniqueId("flagged", "f1"),
+            )
+            .match({
+              counter: (counter) => counter.count.target(),
+              flagged: (flagged) => flagged.score.target(),
+            }),
+          {
+            scope,
+            params: 70,
+          },
+        );
+
+        expect(scope.getState(counterModel.$instances)).toMatchObject({
+          a: { count: 70 },
+          b: { count: 2 },
+        });
+
+        expect(scope.getState(flaggedModel.$instances)).toMatchObject({
+          f1: { score: 70 },
         });
       });
     });

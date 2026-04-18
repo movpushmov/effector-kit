@@ -46,6 +46,36 @@ export function lastPredicate(
   return entry ? { [entry[0]]: entry[1] } : {};
 }
 
+export function idsPredicate(ids: string[]): LensPredicate {
+  if (ids.length === 0) {
+    return () => ({});
+  }
+
+  if (ids.length === 1) {
+    const [id] = ids;
+
+    return (instances) => {
+      const instance = instances[id];
+
+      return instance === undefined ? {} : { [id]: instance };
+    };
+  }
+
+  return (instances) => {
+    const result: Record<string | number, any> = {};
+
+    for (const id of ids) {
+      const instance = instances[id];
+
+      if (instance !== undefined) {
+        result[id] = instance;
+      }
+    }
+
+    return result;
+  };
+}
+
 export function unionWherePredicate(
   fn: (
     data: any,

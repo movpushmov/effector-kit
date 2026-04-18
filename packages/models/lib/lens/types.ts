@@ -61,6 +61,7 @@ export type LensProps<InputModel extends LensInputModel | Union<UnionMap>> = {
 
 type LensApi<Input extends LensInputModel, Props = never> = {
   getSource(): StoreValue<Input["$instances"]>;
+  ids(...ids: string[]): Lens<Input, Props>;
   where(
     predicate: [Props] extends [never]
       ? (data: ContractData<Input["~contract"]> & { id: string }) => boolean
@@ -132,6 +133,7 @@ export type UnionLens<
   Props = never,
 > = {
   only<K extends Keys>(...keys: K[]): UnionLens<U, K, Props>;
+  ids(...ids: string[]): UnionLens<U, Keys, Props>;
   where(
     predicate: [Props] extends [never]
       ? (

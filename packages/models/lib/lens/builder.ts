@@ -5,6 +5,7 @@ import type { Union, UnionMap } from "../union";
 import { createModelLensApi } from "./model-api";
 import {
   firstPredicate,
+  idsPredicate,
   lastPredicate,
   unionWherePredicate,
   wherePredicate,
@@ -167,6 +168,9 @@ function buildModelLens(config: ModelLensConfig): any {
     props() {
       return lensObj;
     },
+    ids(...ids: string[]) {
+      return createLensRoot(cloneModelConfig(config, idsPredicate(ids)));
+    },
     where(predicate: any) {
       return createLensRoot(
         cloneModelConfig(config, wherePredicate(predicate)),
@@ -280,6 +284,11 @@ function buildUnionLens(config: UnionLensConfig): any {
   const lensObj: any = {
     props() {
       return lensObj;
+    },
+    ids(...ids: string[]) {
+      return createLensRoot(
+        cloneUnionConfig(config, undefined, idsPredicate(ids)),
+      );
     },
     where(predicate: any) {
       return createLensRoot(
