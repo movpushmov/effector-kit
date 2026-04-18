@@ -19,6 +19,7 @@ import type {
   StoreWritable,
 } from "effector";
 import type { ReactNode } from "react";
+import { reactCreatedModelMeta } from "./meta";
 
 type ContractInput = Contract<any> | (() => Contract<any>);
 
@@ -52,6 +53,39 @@ export interface ReactModelHandle<T extends Model<any, any>> {
   scope?: Scope | undefined;
 }
 
+type CreatedModelUnitValue<Element> =
+  Element extends StoreWritable<any>
+    ? Element
+    : Element extends Store<any>
+      ? Element
+      : Element extends EventCallable<any> | Event<any> | Effect<any, any, any>
+        ? Element
+        : Element extends Model<any, any>
+          ? Element
+          : Element extends Ref<any>
+            ? Element
+            : Element extends ModelApi
+              ? CreatedModelApi<Element>
+              : never;
+
+export type CreatedModelApi<Api extends ModelApi> = {
+  [K in keyof Api as K extends `$$${string}` ? never : K]: CreatedModelUnitValue<
+    Api[K]
+  >;
+};
+
+export interface CreatedModelMeta<T extends Model<any, any>> {
+  handle: ReactModelHandle<T>;
+  ownedModel: T;
+  ownedId: string;
+}
+
+export type CreatedModel<T extends Model<any, any>> = CreatedModelApi<
+  T["~api"]
+> & {
+  [reactCreatedModelMeta]: CreatedModelMeta<T>;
+};
+
 type UnionModels<T extends Union<UnionMap>> =
   T extends Union<infer Models extends UnionMap> ? Models : never;
 
@@ -77,6 +111,8 @@ type ResolvedModelValue<Element> =
         ? UnitHandler<Element>
         : Element extends Model<any, any>
           ? Array<ReactModelEntity<Element>>
+          : Element extends CreatedModel<infer TargetModel>
+            ? ReactModelEntity<TargetModel>
           : Element extends Ref<infer Target>
             ? ResolvedRefValue<Target>
             : never;
@@ -98,6 +134,8 @@ type ComponentUnitValue<Element> =
       ? StoreValue<Element>
       : Element extends Model<any, any>
         ? Array<ComponentViewEntity<Element>>
+        : Element extends CreatedModel<infer TargetModel>
+          ? ComponentViewEntity<TargetModel>
         : Element extends Ref<infer Target>
           ? Target extends Model<any, any>
             ? Array<ComponentViewEntity<Target>>
@@ -162,7 +200,7 @@ export interface ComponentConfig<
 export type ComponentProps<T extends Model<any, any>> = Partial<
   ContractData<T["~contract"]>
 > & {
-  model?: ReactModelHandle<T>;
+  model?: ReactModelHandle<T> | CreatedModel<T>;
 };
 
 export type ModelComponent<T extends Model<any, any>> = ((
@@ -171,6 +209,6 @@ export type ModelComponent<T extends Model<any, any>> = ((
   create(
     data?: Partial<ContractData<T["~contract"]>>,
     options?: ComponentCreateOptions,
-  ): ReactModelHandle<T>;
+  ): CreatedModel<T>;
   model: T;
 };

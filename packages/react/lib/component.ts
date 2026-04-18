@@ -6,7 +6,7 @@ import {
   type Model,
   type ModelApi,
 } from "@effector-kit/models";
-import { createReactModelHandle, toViewEntity } from "./runtime";
+import { createCreatedModel, toViewEntity } from "./runtime";
 import { useModel } from "./use-model";
 import type {
   ComponentConfig,
@@ -74,7 +74,7 @@ export function component<
   }) as ModelComponent<typeof builtModel>;
 
   Component.create = (data, options) =>
-    createReactModelHandle(builtModel, data, options);
+    createCreatedModel(builtModel, data, options);
   Component.model = builtModel;
 
   return Component;

@@ -1,512 +1,483 @@
 # @effector-kit/models
 
-Dynamic models implementation in vanilla effector without core modifications. Define a model once, create many independent instances, and target them with a declarative lens API.
+Dynamic models on top of Effector.
 
-## Concepts
+The package gives you:
 
-- **Contract** — describes the shape of an instance (which stores and events it has).
-- **Model** — creates and manages instances, exposes a `lens` for targeting them.
-- **Union** — a named map of models treated as a single discriminated collection.
-- **Lens** — scoped view into a set of instances; accessed via `model.lens`, `ref.lens`, or `child.lens`. Filters and dispatches updates.
-- **Ref** — context-bound pointer to a tracked subset of instances from a model or union.
-- **Child** — an isolated copy of a model whose instances live inside a parent instance's context.
+- `contract(...)` to describe instance shape
+- `model(...)` to create a reusable model
+- `model.create` / `model.delete` to manage instances
+- `model.static(data)` to build plain API units without instance lifecycle
+- `model.lens` to target existing instances declaratively
+- `ref(...)` to track external instances from a parent model
+- `child(...)` to create child collections scoped to a parent instance
+- `union(...)` to work with several models as one collection
 
----
+## Installation
 
-## API
-
-### `define`
-
-Helpers for declaring contract fields. `define.store` and `define.event` require a **type descriptor** as their first argument — either `define.static<T>()` for a concrete type or `define.generic<"Name">()` for a generic type parameter.
-
-#### `define.static<T>()`
-
-Declares a concrete type. Use as the first argument to `define.store` or `define.event`.
-
-#### `define.generic<"Name">()`
-
-Declares a named generic type parameter. The name becomes a key in the generics map, resolved when the contract factory is called.
-
-#### `define.store(type, defaultValue)`
-
-Declares a writable store field.
-
-```ts
-define.store(define.static<number>(), 0);
-define.store(define.static<string>(), "");
-define.store(define.static<boolean>(), false);
-define.store(define.generic<"T">(), null); // type resolved at factory call
+```bash
+pnpm add @effector-kit/models effector effector-action
 ```
 
-#### `define.event(type)`
-
-Declares an event field.
+## Basic example
 
 ```ts
-define.event(define.static<void>());
-define.event(define.static<string>());
-define.event(define.generic<"Payload">());
-```
+import { createEvent, sample } from "effector";
+import {
+  contract,
+  define,
+  model,
+  type TNumber,
+  type TString,
+} from "@effector-kit/models";
 
-#### `define.child(model)`
+const todoModel = model({
+  contract: contract({
+    title: define.store(define.schema<TString>(), ""),
+    done: define.store(define.schema<TNumber>(), 0),
+  })(),
+  fn: ({ title, done }) => {
+    const rename = createEvent<string>();
+    const setDone = createEvent<number>();
 
-Contract field descriptor for embedding a child model (instances scoped to parent).
-
-#### `define.ref(model)`
-
-Contract field descriptor for referencing instances of another model.
-
----
-
-### `contract(shape)`
-
-Defines the data shape for a model. Returns a **factory function**. Call the factory to produce a contract — optionally passing generic types.
-
-```ts
-import { contract, define } from "@effector-kit/models";
-
-const makeUserContract = contract({
-  name: define.store(define.static<string>(), ""),
-  age: define.store(define.static<number>(), 0),
-  save: define.event(define.static<void>()),
-});
-
-// Concrete contract — call the factory
-const userContract = makeUserContract();
-```
-
-**Generic contracts** — define reusable shapes where the type is supplied at call time:
-
-```ts
-const makeItemContract = contract({
-  value: define.store(define.generic<"T">(), null),
-  label: define.store(define.static<string>(), ""),
-});
-
-// Instantiate with a concrete generic
-const numberItemContract = makeItemContract<{ T: number }>();
-const stringItemContract = makeItemContract<{ T: string }>();
-```
-
----
-
-### `model({ contract, fn })`
-
-Creates a model. The `fn` receives live Effector units built from the contract and returns the public API. Logic wired inside `fn` — via `sample`, etc. — runs independently per instance.
-
-```ts
-import { model, contract, define } from "@effector-kit/models";
-import { sample } from "effector";
-
-const makeCounterContract = contract({
-  count: define.store(define.static<number>(), 0),
-  increment: define.event(define.static<void>()),
-  reset: define.event(define.static<void>()),
-});
-
-const counterModel = model({
-  contract: makeCounterContract(),
-  fn: ({ count, increment, reset }) => {
     sample({
-      clock: increment,
-      source: count,
-      fn: (n) => n + 1,
-      target: count,
+      clock: rename,
+      target: title,
     });
-    sample({ clock: reset, fn: () => 0, target: count });
-    return { count, increment, reset };
+
+    sample({
+      clock: setDone,
+      target: done,
+    });
+
+    return {
+      title,
+      done,
+      rename,
+      setDone,
+    };
+  },
+});
+
+todoModel.create({
+  id: "a",
+  data: {
+    title: "Write docs",
+    done: 0,
   },
 });
 ```
 
-**Returns** a `Model` with:
+## Type schema
 
-| Property     | Type                                        | Description               |
-| ------------ | ------------------------------------------- | ------------------------- |
-| `$instances` | `Store<Record<string, Data>>`               | All live instances        |
-| `create`     | `EventCallable<{ id: string; data: Data }>` | Creates a new instance    |
-| `delete`     | `EventCallable<string>`                     | Removes instance by id    |
-| `lens`       | `Lens`                                      | Targeting API (see below) |
-
-**Creating instances:**
+Contracts use `define.schema<T>()`.
 
 ```ts
-counterModel.create({ id: "a", data: { count: 0 } });
-counterModel.create({ id: "b", data: { count: 10 } });
+import {
+  define,
+  type TBoolean,
+  type TNumber,
+  type TRef,
+  type TString,
+} from "@effector-kit/models";
 
-counterModel.$instances.getState();
-// { a: { count: 0 }, b: { count: 10 } }
+define.store(define.schema<TString>(), "");
+define.store(define.schema<TNumber>(), 0);
+define.store(define.schema<TBoolean>(), false);
+define.event(define.schema<TRef<"Payload">>());
 ```
 
-**Removing instance:**
+Common exported schema helpers:
 
-`delete` accepts an instance id and drops that key from `$instances`.
+- `TString`
+- `TNumber`
+- `TBoolean`
+- `TVoid`
+- `TRef<"...">` for contract generics
+- `TArray`, `TObject`, `TRecord`, `TUnion`, `TIntersect`, `TEnum`
+
+## `contract(shape)`
+
+`contract(...)` returns a factory.
 
 ```ts
-counterModel.delete("a");
-```
-
-**`model.static(data)`**
-
-Builds a static (non-instance) API object from the model contract. Useful when you need a “plain” set of units shaped like the model API without creating/targeting instances.
-
-```ts
-// Using the same `counterModel` contract shape:
-const counterModel = model({
-  contract: contract({
-    count: define.store(define.static<number>(), 0),
-    increment: define.event(define.static<void>()),
-    reset: define.event(define.static<void>()),
-  })(),
-  fn: ({ count, increment, reset }) => ({ count, increment, reset }),
+const makeCounterContract = contract({
+  count: define.store(define.schema<TNumber>(), 0),
 });
 
-const staticCounter = counterModel.static({ count: 5 });
-
-staticCounter.count.getState(); // 5
-
-// The returned object is fully typed from the model contract:
-// - stores keep their value types
-// - events keep their payload types
-staticCounter.increment(); // EventCallable<void>
-staticCounter.reset(); // EventCallable<void>
+const counterContract = makeCounterContract();
 ```
 
----
-
-### `union(models)`
-
-Creates a discriminated-union descriptor that groups multiple models under named keys. Always passed **inline** as the argument to `ref` — never stored in its own variable.
+Generic contracts are supported through `TRef<"...">`.
 
 ```ts
-const r = ref(union({ counter: counterModel, flagged: flaggedModel }));
+const makeValueContract = contract({
+  value: define.store(define.schema<TRef<"Value">>(), "" as never),
+  change: define.event(define.schema<TRef<"Value">>()),
+});
+
+const stringValueContract = makeValueContract<{ Value: string }>();
 ```
 
-`is.union(x)` returns `true` for union values; `is.model(x)` returns `false`.
+## `model({ contract, fn })`
 
----
+`model(...)` creates a reusable model definition.
 
-### Lens
-
-Every model exposes a `.lens` that lets you target stores and events across instances without reading state imperatively.
-
-#### `lens.<field>.target()`
-
-Returns an `EventCallable` that, when triggered, dispatches the value into the matching field of all (or filtered) instances.
+`fn` receives Effector units created from the contract and returns the public API of the model.
 
 ```ts
-import { createEvent, sample } from "effector";
+const counterModel = model({
+  contract: contract({
+    count: define.store(define.schema<TNumber>(), 0),
+  })(),
+  fn: ({ count }) => {
+    const setCount = createEvent<number>();
 
-const setCount = createEvent<number>();
+    sample({
+      clock: setCount,
+      target: count,
+    });
 
-// update ALL instances
-sample({ clock: setCount, target: counterModel.lens.count.target() });
+    return {
+      count,
+      setCount,
+    };
+  },
+});
+```
 
-// transform before dispatching
+The returned model has:
+
+- `$instances`
+- `create`
+- `delete`
+- `lens`
+- `static(data)`
+
+### Creating and deleting instances
+
+```ts
+counterModel.create({ id: "a", data: { count: 1 } });
+counterModel.create([
+  { id: "b", data: { count: 2 } },
+  { id: "c", data: { count: 3 } },
+]);
+
+counterModel.delete("a");
+counterModel.delete(["b", "c"]);
+```
+
+### `model.static(data)`
+
+Creates plain Effector units shaped like the model API, but not attached to instance lifecycle.
+
+```ts
+const api = counterModel.static({ count: 10 });
+
+api.count.getState(); // 10
+api.setCount(20);
+```
+
+## Lens API
+
+Every model has `model.lens`.
+
+Use it to target existing instances without reading `$instances` imperatively.
+
+### `lens.field.target()`
+
+Dispatches to all matched instances.
+
+```ts
+const setAll = createEvent<number>();
+
 sample({
-  clock: setCount,
-  fn: (n) => n * 2,
+  clock: setAll,
   target: counterModel.lens.count.target(),
 });
 ```
 
-#### `lens.<field>.clock()`
+### `lens.field.clock()`
 
-Returns an `Event` that fires whenever the field updates inside any matched instance.
-
-```ts
-const anyCountChanged = counterModel.lens.count.clock();
-anyCountChanged.watch((value) => console.log("count changed to", value));
-```
-
-#### `lens.where(predicate)`
-
-Filters instances before applying an action. Chainable.
+Watches updates from matched instances.
 
 ```ts
-const trigger = createEvent<number>();
-sample({
-  clock: trigger,
-  target: counterModel.lens.where(({ count }) => count > 5).count.target(),
+counterModel.lens.count.clock().watch((value) => {
+  console.log(value);
 });
 ```
 
-#### `lens.first()` / `lens.last()`
+### `lens.where(...)`
 
-Restricts the target to the first or last instance (after any `where` filters).
+Filters instances.
 
 ```ts
-sample({ clock: trigger, target: counterModel.lens.first().count.target() });
-sample({ clock: trigger, target: counterModel.lens.last().count.target() });
+counterModel.lens.where((entity) => entity.count > 0).count.target();
 ```
 
-#### Chaining
+For a regular model lens, `where(...)` receives the current entity data plus `id`.
 
 ```ts
-counterModel.lens
-  .where(({ count }) => count > 0)
-  .first()
-  .count.target();
+counterModel.lens.where((entity) => entity.id === "a").count.target();
 ```
 
-#### `lens.delete()`
+For a union lens, `where(...)` receives union entity data plus `id`.
 
-Returns an `EventCallable<void>`. When called, it removes every instance in the current lens selection by id:
+In practice, variant branching should usually go through `ctx.match(...)`, while the entity itself contains the fields of the current variant.
+
+Union `where(...)` also exposes `ctx` helpers:
+
+- `ctx.match(...)` for variant-specific branching
+- `ctx.uniqueId(variantKey, id)` for namespaced identity checks
 
 ```ts
-const purgeZero = createEvent<void>();
-sample({
-  clock: purgeZero,
-  target: counterModel.lens.where(({ count }) => count === 0).delete(),
+selection.lens.where((entity, _, ctx) =>
+  ctx.match({
+    counter: (counter) => counter.count > 0,
+    flagged: (flagged) => flagged.score > 0,
+  }),
+);
+```
+
+```ts
+selection.lens.where((entity, _, ctx) => {
+  return entity.id === ctx.uniqueId("counter", "a");
 });
 ```
 
----
+### `lens.first()` / `lens.last()`
 
-### `ref(model)` and `ref(union)`
-
-Tracks a subset of instance IDs. Every `ref` exposes a `.lens` — identical in API to `model.lens` for single-model refs, or a `UnionLens` for union refs — but its data source is restricted to the tracked IDs.
-
-#### `ref(model)` — single model
+Restricts the selection to one matched instance.
 
 ```ts
-const listModel = model({
-  contract: listContract(),
-  fn: (api) => {
-    const selected = ref(counterModel);
-    return {
-      ...api,
-      add: selected.add,
-      remove: selected.remove,
-      lens: selected.lens,
-    };
-  },
+counterModel.lens.first().count.target();
+counterModel.lens.last().count.target();
+```
+
+### `lens.delete()`
+
+Deletes all currently matched instances.
+
+```ts
+counterModel.lens.where((entity) => entity.count === 0).delete();
+```
+
+### `lens.only(...)`
+
+`only(...)` exists on union lenses.
+
+It narrows the active set of variants before you access variant-specific API.
+
+```ts
+selection.lens.only("counter").counter.count.target();
+```
+
+This is useful when you want to keep working with one branch of a union without writing a full `match(...)`.
+
+### `lens.match(...)`
+
+`match(...)` exists on union lenses.
+
+It lets you route one action to different sub-lenses for different variants.
+
+```ts
+selection.lens.match({
+  counter: (counter) => counter.count.target(),
+  flagged: (flagged) => flagged.score.target(),
 });
 ```
 
-| Property | Type                      | Description                                                    |
-| -------- | ------------------------- | -------------------------------------------------------------- |
-| `add`    | `EventCallable<string>`   | Start tracking an instance ID                                  |
-| `remove` | `EventCallable<string>`   | Stop tracking an instance ID                                   |
-| `$ids`   | `StoreWritable<string[]>` | Currently tracked IDs                                          |
-| `lens`   | `Lens<Model>`             | Lens over tracked instances; supports `where`, `first`, `last` |
+You can use additional filters inside each branch, and those predicates stay isolated per branch.
 
-#### `ref(union)` — union
+```ts
+selection.lens.match({
+  counter: (counter) =>
+    counter.where((entity) => entity.count > 0).count.target(),
+  flagged: (flagged) =>
+    flagged.where((entity) => entity.score > 0).score.target(),
+});
+```
+
+## `ref(model)` and `ref(union(...))`
+
+`ref(...)` creates a tracked selection inside a parent model.
 
 ```ts
 const dashboardModel = model({
-  contract: dashboardContract(),
-  fn: (api) => {
-    const selected = ref(
-      union({ counter: counterModel, flagged: flaggedModel }),
-    );
-    return {
-      ...api,
-      add: selected.add,
-      remove: selected.remove,
-      lens: selected.lens,
-    };
-  },
-});
-```
-
-| Property | Type                                                | Description                                                        |
-| -------- | --------------------------------------------------- | ------------------------------------------------------------------ |
-| `add`    | `{ [K in keys]: EventCallable<string> }`            | Start tracking an instance by variant                              |
-| `remove` | `{ [K in keys]: EventCallable<string> }`            | Stop tracking an instance by variant                               |
-| `$ids`   | `StoreWritable<Array<{ key: string; id: string }>>` | Tracked `{ key, id }` pairs                                        |
-| `lens`   | `UnionLens`                                         | Lens over tracked instances; supports all union lens methods below |
-
-#### Union lens — `ref(union).lens`
-
-- **`.lens.only(...keys)`**: restrict variants (mutable chain)
-- **`.lens.where(...)`**: filter instances (mutable chain). Use `ctx.match({ ... })` for variant-specific predicates.
-- **`.lens.match({ ... })`**: build per-variant sub-lenses and merge their targets into one `EventCallable` (usable as a `sample` target).
-- **`.lens.delete()`**: returns `EventCallable` that removes every instance in the current selection when called (usable as a `sample` target).
-
-Examples for `.only(...)`:
-
-```ts
-// Only ONE key → `e` is that single entity type.
-selected.lens.only("counter").where((e) => e.count > 0);
-//            ^ e: { id: string; count: number; ... }
-
-// Two (or more) keys → `e` is a discriminated union of those entity types.
-selected.lens.only("counter", "flagged").where((e, _, ctx) => {
-  // ctx.match only needs handlers for the active keys
-  return (
-    ctx!.match({
-      counter: (x) => x.count > 0,
-      flagged: (x) => x.score > 0,
-    }) ?? false
-  );
-});
-
-// 2–3 keys works the same way.
-selected.lens.only("counter", "flagged", "other").where((e, _, ctx) => {
-  return (
-    ctx!.match({
-      counter: () => true,
-      flagged: () => true,
-      other: () => true,
-    }) ?? false
-  );
-});
-```
-
-Example `where((e, _, ctx) => ...)`:
-
-```ts
-selected.lens.where((e, _, ctx) => {
-  // Variant-specific predicate without reading internal tags:
-  const ok = ctx!.match({
-    counter: (x) => x.count > 0,
-    flagged: (x) => x.score > 0,
-  });
-
-  // If you need the internal namespaced key for a known union key + id:
-  // (use union keys explicitly: "counter" | "flagged" | ...)
-  const key = ctx!.uniqueId("counter", e.id);
-  void key;
-
-  return ok ?? false;
-});
-```
-
----
-
-### `child(model)`
-
-Creates an isolated copy of a model whose `$instances` store is scoped to a parent instance's context. Instances created on the child are invisible outside the parent's context.
-
-```ts
-import { model, contract, define, child } from "@effector-kit/models";
-
-const makeItemContract = contract({
-  value: define.store(define.static<number>(), 0),
-});
-
-const itemModel = model({
-  contract: makeItemContract(),
-  fn: ({ value }) => ({ value }),
-});
-
-const makeListContract = contract({
-  name: define.store(define.static<string>(), ""),
-});
-
-const listModel = model({
-  contract: makeListContract(),
+  contract: contract({
+    name: define.store(define.schema<TString>(), ""),
+  })(),
   fn: ({ name }) => {
-    const items = child(itemModel); // each listModel instance gets its own items
-    return { name };
+    const selected = ref(counterModel);
+
+    const track = createEvent<string>();
+    const untrack = createEvent<string>();
+    const setSelectedCount = createEvent<number>();
+
+    sample({
+      clock: track,
+      target: selected.add,
+    });
+
+    sample({
+      clock: untrack,
+      target: selected.remove,
+    });
+
+    sample({
+      clock: setSelectedCount,
+      target: selected.lens.count.target(),
+    });
+
+    return {
+      name,
+      selected,
+      track,
+      untrack,
+      setSelectedCount,
+    };
   },
 });
 ```
 
-The returned child is a full `Model` with its own `$instances`, `create`, and `lens`, isolated per parent instance.
+For a regular model ref:
 
-> **`child()` vs `define.child()`** — `define.child(model)` is a contract field descriptor (used inside `contract({})`) while `child(model)` creates a live scoped model inside `fn`.
+- `selected.add(id)`
+- `selected.remove(id)`
+- `selected.$ids`
+- `selected.lens`
 
----
+For a union ref:
 
-## Types
+- `selected.add.counter(id)`
+- `selected.remove.counter(id)`
+- `selected.add.flagged(id)`
+- `selected.remove.flagged(id)`
+- `selected.$ids`
+- `selected.lens`
 
-```ts
-import type {
-  Model, // the full model object
-  ModelApi, // { [key]: Store | Event | Effect | ModelApi }
-  ContractData, // inferred instance data shape from a contract
-  ContractApi, // inferred unit shape from a contract
-  Union, // return type of union()
-  UnionMap, // { [key: string]: Model<any, any> }
-  Ref, // return type of ref()
-  Lens, // type of model.lens / ref.lens / child.lens
-} from "@effector-kit/models";
-```
+## `child(model)`
 
----
-
-## Union example
+`child(...)` creates a child model whose instances live inside the current parent instance.
 
 ```ts
-import { model, contract, define, union, ref } from "@effector-kit/models";
-import { createEvent, sample } from "effector";
+const itemModel = model({
+  contract: contract({
+    value: define.store(define.schema<TNumber>(), 0),
+  })(),
+  fn: ({ value }) => {
+    const setValue = createEvent<number>();
 
-const counterModel = model({
-  contract: contract({ count: define.store(define.static<number>(), 0) })(),
-  fn: ({ count }) => ({ count }),
-});
-
-const flaggedModel = model({
-  contract: contract({ score: define.store(define.static<number>(), 0) })(),
-  fn: ({ score }) => ({ score }),
-});
-
-const dashboardModel = model({
-  contract: contract({})(),
-  fn: () => {
-    const selected = ref(
-      union({ counter: counterModel, flagged: flaggedModel }),
-    );
-
-    const bumpAll = createEvent<number>();
-    const merged = selected.lens.match({
-      counter: (sub) => sub.where((e) => e.count > 4).count.target(),
-      flagged: (sub) => sub.where((e) => e.score < 3).score.target(),
+    sample({
+      clock: setValue,
+      target: value,
     });
-    sample({ clock: bumpAll, target: merged });
 
     return {
-      add: selected.add,
-      remove: selected.remove,
-      bumpAll,
+      value,
+      setValue,
     };
   },
 });
 
-counterModel.create({ id: "c1", data: { count: 3 } });
-counterModel.create({ id: "c2", data: { count: 8 } });
-flaggedModel.create({ id: "f1", data: { score: 1 } });
-flaggedModel.create({ id: "f2", data: { score: 10 } });
+const listModel = model({
+  contract: contract({
+    title: define.store(define.schema<TString>(), ""),
+  })(),
+  fn: ({ title }) => {
+    const items = child(itemModel);
+    const createItem = createEvent<{ id: string; data: { value: number } }>();
 
-dashboardModel.create({ id: "dash1", data: {} });
-```
+    sample({
+      clock: createItem,
+      target: items.create,
+    });
 
----
-
-## Full example
-
-```ts
-import { model, contract, define } from "@effector-kit/models";
-import { createEvent, sample } from "effector";
-
-const makeTodoContract = contract({
-  text: define.store(define.static<string>(), ""),
-  done: define.store(define.static<boolean>(), false),
-  toggle: define.event(define.static<void>()),
-});
-
-const todoModel = model({
-  contract: makeTodoContract(),
-  fn: ({ done, toggle }) => {
-    sample({ clock: toggle, source: done, fn: (d) => !d, target: done });
-    return { done, toggle };
+    return {
+      title,
+      items,
+      createItem,
+    };
   },
 });
+```
 
-// Create instances
-todoModel.create({ id: "1", data: { text: "Buy milk", done: false } });
-todoModel.create({ id: "2", data: { text: "Ship it", done: false } });
+Important behavior:
 
-// Toggle all todos
-const toggleAll = createEvent<void>();
-sample({ clock: toggleAll, target: todoModel.lens.toggle.target() });
+- child instances exist only inside parent context
+- different parent instances get isolated child collections
+- `items.lens...` works the same way as normal model lenses
 
-// Toggle only incomplete todos
-const completeRemaining = createEvent<void>();
-sample({
-  clock: completeRemaining,
-  target: todoModel.lens.where(({ done }) => !done).toggle.target(),
+## `union(models)`
+
+`union(...)` groups several models under named keys.
+
+```ts
+const selection = ref(
+  union({
+    counter: counterModel,
+    flagged: flaggedModel,
+  }),
+);
+```
+
+Union lenses support:
+
+- `only(...)`
+- `where(...)`
+- `first()`
+- `last()`
+- `delete()`
+- `match(...)`
+
+`match(...)` is available both on direct union lenses and on `ref(union(...)).lens`.
+
+Example:
+
+```ts
+selection.lens.match({
+  counter: (counter) => counter.count.target(),
+  flagged: (flagged) => flagged.score.target(),
+});
+```
+
+## Runtime helpers
+
+### `is`
+
+Runtime kind guards:
+
+- `is.contract(value)`
+- `is.model(value)`
+- `is.union(value)`
+- `is.ref(value)`
+
+### `withInstanceContext`
+
+Low-level helper exported from the package runtime. Most users do not need it directly.
+
+## Scope-safe testing
+
+The package is designed to work with Effector scopes.
+
+Typical flow in tests:
+
+```ts
+import { allSettled, fork } from "effector";
+
+const scope = fork();
+
+await allSettled(counterModel.create, {
+  scope,
+  params: { id: "a", data: { count: 1 } },
+});
+
+await allSettled(counterModel.lens.count.target(), {
+  scope,
+  params: 10,
+});
+
+expect(scope.getState(counterModel.$instances)).toMatchObject({
+  a: { count: 10 },
 });
 ```

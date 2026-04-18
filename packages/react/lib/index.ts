@@ -7,6 +7,7 @@ export type {
   ComponentProps,
   ComponentViewEntity,
   ComponentViewValue,
+  CreatedModel,
   ModelComponent,
   ReactModelEntity,
   ReactModelHandle,

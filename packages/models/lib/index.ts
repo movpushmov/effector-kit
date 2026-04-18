@@ -8,7 +8,7 @@ export { child } from "./child";
 export { union } from "./union";
 
 export { is } from "./is";
-export { withInstanceContext } from "./runtime";
+export { withInstanceContext, getContext } from "./runtime";
 
 export type { Model, ModelApi, ContractData, ContractApi } from "./models";
 export type { Ref } from "./ref";

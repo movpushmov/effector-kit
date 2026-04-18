@@ -5,6 +5,8 @@ import { useProvidedScope } from "effector-react";
 import {
   collectGraphUpdates,
   createReactModelHandle,
+  getCreatedModelHandle,
+  isCreatedModel,
   isLens,
   isReactModelHandle,
   launchManagedModel,
@@ -13,6 +15,7 @@ import {
   unmountManagedModel,
 } from "./runtime";
 import type {
+  CreatedModel,
   ReactModelEntity,
   ReactModelHandle,
   UseModelOptions,
@@ -52,7 +55,10 @@ export function useModel<T extends Model<any, any>>(
   handle: ReactModelHandle<T>,
 ): ReactModelEntity<T>;
 export function useModel<T extends Model<any, any>>(
-  input: T | ReactModelHandle<T>,
+  handle: CreatedModel<T>,
+): ReactModelEntity<T>;
+export function useModel<T extends Model<any, any>>(
+  input: T | ReactModelHandle<T> | CreatedModel<T>,
   lensOrOptions?: Lens<T> | UseModelOptions<T>,
   maybeOptions?: UseModelOptions<T>,
 ): ReactModelEntity<T> | Array<ReactModelEntity<T>> {
@@ -61,6 +67,32 @@ export function useModel<T extends Model<any, any>>(
 
   if (isReactModelHandle(input)) {
     const handle = input;
+    const scope = handle.scope ?? providedScope;
+    const mountedRef = useRef(false);
+
+    if (!mountedRef.current) {
+      launchManagedModel({ ...handle, scope });
+      mountedRef.current = true;
+    }
+
+    useEffect(() => {
+      const unsubscribe = subscribeToGraph(
+        handle.model,
+        () => rerender(),
+        scope,
+      );
+
+      return () => {
+        unsubscribe();
+        void unmountManagedModel({ ...handle, scope });
+      };
+    }, [handle, scope]);
+
+    return resolveHandleEntity(handle, scope)!;
+  }
+
+  if (isCreatedModel(input)) {
+    const handle = getCreatedModelHandle(input);
     const scope = handle.scope ?? providedScope;
     const mountedRef = useRef(false);
 

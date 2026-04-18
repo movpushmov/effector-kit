@@ -377,7 +377,6 @@ describe("@effector-kit/react", () => {
     const view = renderInScope(scope, <Counter model={controlled} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("id").textContent).toBe(controlled.id);
       expect(screen.getByTestId("count").textContent).toBe("5");
     });
 
@@ -389,14 +388,89 @@ describe("@effector-kit/react", () => {
       expect(screen.getByTestId("count").textContent).toBe("8");
     });
 
-    expect(scope.getState(Counter.model.$instances)).toMatchObject({
-      [controlled.id]: { count: 8 },
-    });
+    expect(Object.values(scope.getState(Counter.model.$instances))).toMatchObject([
+      { count: 8 },
+    ]);
 
     view.unmount();
 
     await waitFor(() => {
       expect(scope.getState(Counter.model.$instances)).toStrictEqual({});
+    });
+  });
+
+  test("component.create can be used inside another component model for one owned child instance", async () => {
+    const scope = fork();
+
+    const Dialog = component({
+      contract: contract({
+        opened: define.store(define.schema<TNumber>(), 0),
+      })(),
+      model: ({ opened }) => {
+        const open = createEvent<void>();
+
+        sample({
+          clock: open,
+          fn: () => 1,
+          target: opened,
+        });
+
+        return {
+          opened,
+          open,
+        };
+      },
+      view: ({ opened, onOpen }) => (
+        <div>
+          <div data-testid="dialog-component-opened">{String(opened)}</div>
+          <button onClick={() => onOpen()} type="button">
+            open dialog component
+          </button>
+        </div>
+      ),
+    });
+
+    const Page = component({
+      contract: contract({
+        title: define.store(define.schema<TString>(), ""),
+      })(),
+      model: ({ title }) => {
+        const dialog = Dialog.create({ opened: 0 });
+        const openDialog = createEvent<void>();
+
+        sample({
+          clock: openDialog,
+          target: dialog.open,
+        });
+
+        return {
+          title,
+          dialog,
+          openDialog,
+        };
+      },
+      view: ({ title, dialog, onOpenDialog }) => (
+        <div>
+          <div data-testid="page-title">{title}</div>
+          <div data-testid="page-dialog-opened">{String(dialog.opened)}</div>
+          <button onClick={() => onOpenDialog()} type="button">
+            open dialog from page
+          </button>
+        </div>
+      ),
+    });
+
+    renderInScope(scope, <Page title="Settings" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("page-title").textContent).toBe("Settings");
+      expect(screen.getByTestId("page-dialog-opened").textContent).toBe("0");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "open dialog from page" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("page-dialog-opened").textContent).toBe("1");
     });
   });
 
@@ -436,10 +510,6 @@ describe("@effector-kit/react", () => {
       value?: "hello" | "updated";
       model?: typeof controlled;
     }>();
-
-    expectTypeOf(controlled.data.value).toEqualTypeOf<
-      "hello" | "updated" | undefined
-    >();
 
     renderInScope(scope, <ValueComponent model={controlled} />);
 
