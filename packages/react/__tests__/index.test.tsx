@@ -13,7 +13,7 @@ import { allSettled, createEvent, fork, sample, type Scope } from "effector";
 import { Provider } from "effector-react";
 import { child, contract, define, model, ref } from "@effector-kit/models";
 import { type TNumber, type TRef, type TString } from "@effector-kit/models";
-import { component, useModel } from "./index";
+import { component, useModel } from "../lib";
 
 afterEach(() => {
   cleanup();

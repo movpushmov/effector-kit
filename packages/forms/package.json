@@ -51,10 +51,7 @@
     "type": "git",
     "url": "git+https://github.com/movpushmov/effector-kit.git"
   },
-  "scripts": {
-    "build": "vite build",
-    "test": "vitest run"
-  },
+  "scripts": {},
   "bugs": {
     "url": "https://github.com/movpushmov/effector-kit/issues"
   },

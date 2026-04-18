@@ -13,7 +13,7 @@ import {
   type ShapeElement,
   type StoreElement,
 } from "../contracts";
-import type { Lens, LensProps } from "../lens";
+import type { Lens, LensInputModel, LensProps } from "../lens";
 import type { Ref } from "../ref";
 
 export type Instances<T extends Contract<any>> = Record<
@@ -72,6 +72,12 @@ export type ModelApi = {
   [k: string]: ModelApiElement;
 };
 
+type ModelLensTarget<T extends Contract<any>, Api extends ModelApi> = LensInputModel<
+  T,
+  Api,
+  Record<string, BaseInstance & ContractData<T>>
+>;
+
 export interface Model<T extends Contract<any>, Api extends ModelApi> {
   "~kind": "model";
   "~contract": T;
@@ -83,7 +89,7 @@ export interface Model<T extends Contract<any>, Api extends ModelApi> {
   create: EventCallable<CreateInstancePayload<T> | CreateInstancePayload<T>[]>;
   delete: EventCallable<string | string[]>;
 
-  lens: Lens<Model<T, Api>> & LensProps<Model<T, Api>>;
+  lens: Lens<ModelLensTarget<T, Api>> & LensProps<ModelLensTarget<T, Api>>;
 
   static: (data: ContractData<T>) => Api;
 }

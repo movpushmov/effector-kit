@@ -159,7 +159,7 @@ export function reserve(units: object[]): void {
       "graphite" in unit &&
       (unit as any).graphite?.meta?.stateRef
     ) {
-      reservedStores.add(unit as StoreWritable<any>);
+      reservedStores.add(unit as unknown as StoreWritable<any>);
     }
   }
 }

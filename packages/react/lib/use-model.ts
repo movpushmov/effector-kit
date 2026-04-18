@@ -1,9 +1,9 @@
 import type { Lens, Model } from "@effector-kit/models";
 import { useEffect, useReducer, useRef } from "react";
-import { createWatch, type Scope } from "effector";
+import { createWatch, type Scope, type Unit } from "effector";
 import { useProvidedScope } from "effector-react";
 import {
-  collectGraphStores,
+  collectGraphUpdates,
   createReactModelHandle,
   isLens,
   isReactModelHandle,
@@ -21,13 +21,21 @@ import type {
 function subscribeToGraph(
   model: Model<any, any>,
   onChange: () => void,
-  scope?: Scope | null,
+  scope?: Scope,
 ) {
-  const stores = collectGraphStores(model);
+  const units = collectGraphUpdates(model);
+
+  if (scope) {
+    return createWatch({
+      unit: units,
+      fn: onChange,
+      scope,
+    });
+  }
+
   return createWatch({
-    unit: stores.map((store) => store.updates),
-    fn: () => onChange(),
-    scope,
+    unit: units,
+    fn: onChange,
   });
 }
 
@@ -49,7 +57,7 @@ export function useModel<T extends Model<any, any>>(
   maybeOptions?: UseModelOptions<T>,
 ): ReactModelEntity<T> | Array<ReactModelEntity<T>> {
   const [, rerender] = useReducer((value) => value + 1, 0);
-  const providedScope = useProvidedScope();
+  const providedScope = useProvidedScope() ?? undefined;
 
   if (isReactModelHandle(input)) {
     const handle = input;

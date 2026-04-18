@@ -22,41 +22,44 @@ import type { ReactNode } from "react";
 
 type ContractInput = Contract<any> | (() => Contract<any>);
 
-export type InferContract<Input extends ContractInput> = Input extends Contract<
-  any
->
-  ? Input
-  : Input extends (...args: any[]) => infer Result
-    ? Result extends Contract<any>
-      ? Result
-      : never
-    : never;
+export type InferContract<Input extends ContractInput> =
+  Input extends Contract<any>
+    ? Input
+    : Input extends (...args: any[]) => infer Result
+      ? Result extends Contract<any>
+        ? Result
+        : never
+      : never;
 
 type Handler<Payload> = [Payload] extends [void]
   ? () => void
   : (payload: Payload) => void;
 
-type UnitHandler<Unit> = Unit extends EventCallable<infer Payload>
-  ? Handler<Payload>
-  : Unit extends Event<infer Payload>
+type UnitHandler<Unit> =
+  Unit extends EventCallable<infer Payload>
     ? Handler<Payload>
-    : Unit extends Effect<infer Params, any, any>
-      ? Handler<Params>
-      : never;
+    : Unit extends Event<infer Payload>
+      ? Handler<Payload>
+      : Unit extends Effect<infer Params, any, any>
+        ? Handler<Params>
+        : never;
 
 export interface ReactModelHandle<T extends Model<any, any>> {
   "~kind": "react-model";
   id: string;
   model: T;
   data: Partial<ContractData<T["~contract"]>>;
-  scope?: Scope;
+  scope?: Scope | undefined;
 }
 
+type UnionModels<T extends Union<UnionMap>> =
+  T extends Union<infer Models extends UnionMap> ? Models : never;
+
 type ResolvedUnionEntity<T extends Union<UnionMap>> = {
-  [K in keyof T["models"]]: ReactModelEntity<T["models"][K]> & {
+  [K in keyof UnionModels<T>]: ReactModelEntity<UnionModels<T>[K]> & {
     variant: K;
   };
-}[keyof T["models"]];
+}[keyof UnionModels<T>];
 
 type ResolvedRefValue<T extends Model<any, any> | Union<UnionMap>> =
   T extends Model<any, any>
@@ -65,17 +68,18 @@ type ResolvedRefValue<T extends Model<any, any> | Union<UnionMap>> =
       ? Array<ResolvedUnionEntity<T>>
       : never;
 
-type ResolvedModelValue<Element> = Element extends StoreWritable<any>
-  ? StoreValue<Element>
-  : Element extends Store<any>
+type ResolvedModelValue<Element> =
+  Element extends StoreWritable<any>
     ? StoreValue<Element>
-    : Element extends Event<any> | EventCallable<any> | Effect<any, any, any>
-      ? UnitHandler<Element>
-      : Element extends Model<any, any>
-        ? Array<ReactModelEntity<Element>>
-        : Element extends Ref<infer Target>
-          ? ResolvedRefValue<Target>
-          : never;
+    : Element extends Store<any>
+      ? StoreValue<Element>
+      : Element extends Event<any> | EventCallable<any> | Effect<any, any, any>
+        ? UnitHandler<Element>
+        : Element extends Model<any, any>
+          ? Array<ReactModelEntity<Element>>
+          : Element extends Ref<infer Target>
+            ? ResolvedRefValue<Target>
+            : never;
 
 export type ReactModelValue<Api extends ModelApi> = {
   [K in keyof Api as K extends `$$${string}` ? never : K]: ResolvedModelValue<
@@ -87,27 +91,28 @@ export type ReactModelEntity<T extends Model<any, any>> = {
   id: string;
 } & ReactModelValue<T["~api"]>;
 
-type ComponentUnitValue<Element> = Element extends StoreWritable<any>
-  ? StoreValue<Element>
-  : Element extends Store<any>
+type ComponentUnitValue<Element> =
+  Element extends StoreWritable<any>
     ? StoreValue<Element>
-    : Element extends Model<any, any>
-      ? Array<ComponentViewEntity<Element>>
-      : Element extends Ref<infer Target>
-        ? Target extends Model<any, any>
-          ? Array<ComponentViewEntity<Target>>
-          : Target extends Union<UnionMap>
-            ? Array<
-                {
-                  [K in keyof Target["models"]]: ComponentViewEntity<
-                    Target["models"][K]
-                  > & {
-                    variant: K;
-                  };
-                }[keyof Target["models"]]
-              >
-            : never
-        : never;
+    : Element extends Store<any>
+      ? StoreValue<Element>
+      : Element extends Model<any, any>
+        ? Array<ComponentViewEntity<Element>>
+        : Element extends Ref<infer Target>
+          ? Target extends Model<any, any>
+            ? Array<ComponentViewEntity<Target>>
+            : Target extends Union<UnionMap>
+              ? Array<
+                  {
+                    [K in keyof UnionModels<Target>]: ComponentViewEntity<
+                      UnionModels<Target>[K]
+                    > & {
+                      variant: K;
+                    };
+                  }[keyof UnionModels<Target>]
+                >
+              : never
+          : never;
 
 type ComponentUnitHandlerName<Key extends string> = `on${Capitalize<Key>}`;
 
@@ -136,7 +141,7 @@ export interface UseModelOptions<T extends Model<any, any>> {
 
 export interface ComponentCreateOptions {
   id?: string;
-  scope?: Scope;
+  scope?: Scope | undefined;
 }
 
 export interface ComponentConfig<
@@ -149,7 +154,9 @@ export interface ComponentConfig<
     mounted: EventCallable<void>,
     unmounted: EventCallable<void>,
   ) => Api;
-  view: (props: ComponentViewEntity<Model<InferContract<Input>, Api>>) => ReactNode;
+  view: (
+    props: ComponentViewEntity<Model<InferContract<Input>, Api>>,
+  ) => ReactNode;
 }
 
 export type ComponentProps<T extends Model<any, any>> = Partial<

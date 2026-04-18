@@ -5,6 +5,7 @@ import type {
   StoreValue,
   StoreWritable,
 } from "effector";
+import type { Contract } from "../contracts";
 import type { ContractData, Model, ModelApiElement } from "../models";
 import type { Union, UnionMap } from "../union";
 
@@ -36,18 +37,29 @@ type ModelLensElement<Element extends ModelApiElement, Props = never> =
             ? Lens<Element, Props>
             : never;
 
-export type ModelLensApi<InputModel extends Model<any, any>, Props> = {
+export type LensInputModel<
+  TContract extends Contract<any> = Contract<any>,
+  TApi extends Record<string, ModelApiElement> = Record<string, ModelApiElement>,
+  TInstances = Record<string, unknown>,
+> = {
+  "~kind": "model";
+  "~contract": TContract;
+  "~api": TApi;
+  $instances: Store<TInstances>;
+};
+
+export type ModelLensApi<InputModel extends LensInputModel, Props> = {
   [k in keyof InputModel["~api"]]: ModelLensElement<
     InputModel["~api"][k],
     Props
   >;
 };
 
-export type LensProps<InputModel extends Model<any, any> | Union<UnionMap>> = {
+export type LensProps<InputModel extends LensInputModel | Union<UnionMap>> = {
   props<T>(): Lens<InputModel, T>;
 };
 
-type LensApi<Input extends Model<any, any>, Props = never> = {
+type LensApi<Input extends LensInputModel, Props = never> = {
   getSource(): StoreValue<Input["$instances"]>;
   where(
     predicate: [Props] extends [never]
@@ -74,6 +86,32 @@ type UnionEntityData<
     "~model": K;
   };
 }[Keys];
+
+type UnionMatchConfig<
+  U extends Union<UnionMap>,
+  Keys extends keyof U["models"],
+  Props,
+> = Partial<{
+  [VariantKey in Keys]: (
+    subLens: Lens<U["models"][VariantKey], Props>,
+  ) => Event<any> | EventCallable<any>;
+}>;
+
+type UnionMatchPayload<Config> = {
+  [HandlerKey in keyof Config]: Config[HandlerKey] extends (
+    ...args: any[]
+  ) => Event<infer Payload> | EventCallable<infer Payload>
+    ? Payload
+    : never;
+}[keyof Config];
+
+type UnionVariantApi<
+  U extends Union<UnionMap>,
+  Keys extends keyof U["models"],
+  Props,
+> = {
+  [VariantKey in Keys]: ModelLensApi<U["models"][VariantKey], Props>;
+};
 
 /**
  * Lens over a union of models.
@@ -117,32 +155,16 @@ export type UnionLens<
   last(): UnionLens<U, Keys, Props>;
   delete(): EventCallable<void>;
   uniqueId<K extends Keys>(variantKey: K, id: string): string;
-  match<
-    Config extends {
-      [K in Keys]?: (
-        subLens: Lens<U["models"][K], Props>,
-      ) => Event<any> | EventCallable<any>;
-    },
-  >(
+  match<Config extends UnionMatchConfig<U, Keys, Props>>(
     config: Config,
-  ): EventCallable<
-    {
-      [K in keyof Config]: Config[K] extends (
-        ...args: any[]
-      ) => Event<infer V> | EventCallable<infer V>
-        ? V
-        : never;
-    }[keyof Config]
-  >;
-} & {
-  [K in Keys]: ModelLensApi<U["models"][K], Props>;
-};
+  ): EventCallable<UnionMatchPayload<Config>>;
+} & UnionVariantApi<U, Keys, Props>;
 
 export type Lens<
-  Input extends Model<any, any> | Union<UnionMap>,
+  Input extends LensInputModel | Union<UnionMap>,
   Props = never,
 > =
-  Input extends Model<any, any>
+  Input extends LensInputModel
     ? ModelLensApi<Input, Props> & LensApi<Input, Props>
     : Input extends Union<UnionMap>
       ? UnionLens<Input, keyof Input["models"], Props>
