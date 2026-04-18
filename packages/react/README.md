@@ -95,6 +95,7 @@ The hook resolves model API into React-friendly values:
 - events and effects become callable functions
 - `ref(...)` becomes an array of resolved entities
 - `child(...)` becomes an array of resolved child entities
+- nested plain objects with units are resolved recursively
 
 That means this works directly:
 
@@ -112,6 +113,20 @@ function Dashboard() {
         Track
       </button>
     </div>
+  );
+}
+```
+
+This also works for namespaced plain objects returned from `model(...)`:
+
+```tsx
+function SettingsScreen() {
+  const settings = useModel(settingsModel);
+
+  return (
+    <button onClick={() => settings.panel.toggle()} type="button">
+      {String(settings.panel.opened)}
+    </button>
   );
 }
 ```
@@ -182,6 +197,7 @@ Inside `view(...)`:
 - store fields become plain values
 - event/effect fields become `onXxx` handlers
 - nested models and refs are resolved recursively
+- nested plain objects with units are resolved recursively too
 
 For example, if model returns:
 
@@ -199,6 +215,87 @@ then `view` receives:
   id: string;
   count: number;
   onSetCount: (payload: number) => void;
+}
+```
+
+If `model` returns a nested plain object:
+
+```ts
+return {
+  title,
+  panel: {
+    opened,
+    toggle,
+  },
+};
+```
+
+then `view` receives:
+
+```ts
+{
+  id: string;
+  title: string;
+  panel: {
+    opened: boolean;
+    onToggle: () => void;
+  };
+}
+```
+
+### How `mounted` payload is built
+
+The `mounted` event receives all props that are not part of the component
+contract.
+
+- contract fields are used as initial model data
+- `model` prop is ignored
+- every other prop is forwarded to `mounted`
+
+```tsx
+import { type Event } from "effector";
+import { component } from "@effector-kit/react";
+import {
+  contract,
+  define,
+  type TBoolean,
+  type TString,
+} from "@effector-kit/models";
+
+const Todo = component({
+  contract: contract({
+    title: define.store(define.schema<TString>(), ""),
+    done: define.store(define.schema<TBoolean>(), false),
+  })(),
+  model: (
+    { title, done },
+    mounted: Event<{ userId: string; roomId: string }>,
+  ) => {
+    mounted.watch((payload) => {
+      console.log(payload.userId, payload.roomId);
+    });
+
+    return {
+      title,
+      done,
+    };
+  },
+  view: ({ title, done }) => (
+    <div>
+      {title}:{String(done)}
+    </div>
+  ),
+});
+
+<Todo title="Ship fix" done userId="u1" roomId="room-1" />;
+```
+
+In this example, `mounted` receives:
+
+```ts
+{
+  userId: "u1",
+  roomId: "room-1",
 }
 ```
 

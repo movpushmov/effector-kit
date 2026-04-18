@@ -53,9 +53,11 @@ export function useModel<T extends Model<any, any>>(
 ): Array<ReactModelEntity<T>>;
 export function useModel<T extends Model<any, any>>(
   handle: ReactModelHandle<T>,
+  options?: { mounted?: Record<string, unknown> },
 ): ReactModelEntity<T>;
 export function useModel<T extends Model<any, any>>(
   handle: CreatedModel<T>,
+  options?: { mounted?: Record<string, unknown> },
 ): ReactModelEntity<T>;
 export function useModel<T extends Model<any, any>>(
   input: T | ReactModelHandle<T> | CreatedModel<T>,
@@ -67,11 +69,14 @@ export function useModel<T extends Model<any, any>>(
 
   if (isReactModelHandle(input)) {
     const handle = input;
+    const mounted =
+      (lensOrOptions as { mounted?: Record<string, unknown> } | undefined)
+        ?.mounted ?? {};
     const scope = handle.scope ?? providedScope;
     const mountedRef = useRef(false);
 
     if (!mountedRef.current) {
-      launchManagedModel({ ...handle, scope });
+      launchManagedModel({ ...handle, scope }, mounted);
       mountedRef.current = true;
     }
 
@@ -93,11 +98,14 @@ export function useModel<T extends Model<any, any>>(
 
   if (isCreatedModel(input)) {
     const handle = getCreatedModelHandle(input);
+    const mounted =
+      (lensOrOptions as { mounted?: Record<string, unknown> } | undefined)
+        ?.mounted ?? {};
     const scope = handle.scope ?? providedScope;
     const mountedRef = useRef(false);
 
     if (!mountedRef.current) {
-      launchManagedModel({ ...handle, scope });
+      launchManagedModel({ ...handle, scope }, mounted);
       mountedRef.current = true;
     }
 
@@ -142,7 +150,7 @@ export function useModel<T extends Model<any, any>>(
   const mountedRef = useRef(false);
 
   if (!mountedRef.current) {
-    launchManagedModel({ ...handle, scope });
+    launchManagedModel({ ...handle, scope }, options.mounted ?? {});
     mountedRef.current = true;
   }
 

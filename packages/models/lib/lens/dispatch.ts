@@ -101,7 +101,11 @@ export function createTarget(
           }
         }
 
-        launch(element, payload);
+        launch({
+          target: element,
+          params: payload,
+          scope: baseCurrent?.scope,
+        });
 
         if (!capturedScope) {
           capturedScope = getContext().current?.scope;

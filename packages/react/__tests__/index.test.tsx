@@ -9,10 +9,23 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, expectTypeOf, test } from "vitest";
-import { allSettled, createEvent, fork, sample, type Scope } from "effector";
-import { Provider } from "effector-react";
+import {
+  allSettled,
+  createEvent,
+  createStore,
+  fork,
+  sample,
+  type Event,
+  type Scope,
+} from "effector";
+import { Provider, useUnit } from "effector-react";
 import { child, contract, define, model, ref } from "@effector-kit/models";
-import { type TNumber, type TRef, type TString } from "@effector-kit/models";
+import {
+  type TBoolean,
+  type TNumber,
+  type TRef,
+  type TString,
+} from "@effector-kit/models";
 import { component, useModel } from "../lib";
 
 afterEach(() => {
@@ -110,6 +123,83 @@ function createDashboardModel() {
     counterModel,
     dashboardModel,
   };
+}
+
+function createChatModel() {
+  return model({
+    contract: contract({
+      currentUserId: define.store(define.schema<TString>(), ""),
+    })(),
+    fn: ({ currentUserId }) => {
+      const setChat = createEvent<{ name: string } | null>();
+      const messageTextChanged = createEvent<string>();
+      const sendMessagePressed = createEvent<void>();
+
+      const chat = createStore<{ name: string } | null>(null);
+      const messageText = createStore("");
+      const messages = createStore<string[]>([]);
+
+      sample({
+        clock: setChat,
+        target: chat,
+      });
+
+      sample({
+        clock: messageTextChanged,
+        target: messageText,
+      });
+
+      sample({
+        clock: sendMessagePressed,
+        source: messageText,
+        filter: (text) => text.length > 0,
+        fn: (text) => [text],
+        target: messages,
+      });
+
+      return {
+        currentUserId,
+        chat,
+        messageText,
+        messages,
+        setChat,
+        messageTextChanged,
+        sendMessagePressed,
+      };
+    },
+  });
+}
+
+function createTodoModel() {
+  return model({
+    contract: contract({
+      title: define.store(define.schema<TString>(), ""),
+      done: define.store(define.schema<TBoolean>(), false),
+    })(),
+    fn: ({ title, done }) => {
+      const setTitle = createEvent<string>();
+      const changeDone = createEvent<void>();
+
+      sample({
+        clock: setTitle,
+        target: title,
+      });
+
+      sample({
+        clock: changeDone,
+        source: done,
+        fn: (done) => !done,
+        target: done,
+      });
+
+      return {
+        title,
+        done,
+        setTitle,
+        changeDone,
+      };
+    },
+  });
 }
 
 describe("@effector-kit/react", () => {
@@ -280,6 +370,131 @@ describe("@effector-kit/react", () => {
     });
   });
 
+  test("useModel keeps event names without on-prefix", async () => {
+    const counterModel = createCounterModel();
+    const scope = fork();
+    let lastEntity: ReturnType<typeof useModel<typeof counterModel>> | null =
+      null;
+
+    function Harness() {
+      const entity = useModel(counterModel, {
+        data: { count: 1 },
+      });
+
+      lastEntity = entity;
+
+      return (
+        <div>
+          <div data-testid="count">{entity.count}</div>
+          <button onClick={() => entity.setCount(5)} type="button">
+            set count
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("count").textContent).toBe("1");
+    });
+
+    expect(lastEntity).not.toBeNull();
+    expect(typeof lastEntity?.setCount).toBe("function");
+    expect("onSetCount" in (lastEntity as object)).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "set count" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("count").textContent).toBe("5");
+    });
+  });
+
+  test("useModel materializes root stores created inside model.fn", async () => {
+    const chatModel = createChatModel();
+    const scope = fork();
+    let lastEntity: ReturnType<typeof useModel<typeof chatModel>> | null = null;
+
+    function Harness() {
+      const entity = useModel(chatModel, {
+        data: { currentUserId: "u1" },
+      });
+
+      lastEntity = entity;
+
+      return (
+        <div>
+          <div data-testid="current-user-id">{entity.currentUserId}</div>
+          <div data-testid="chat-name">{entity.chat?.name ?? "empty"}</div>
+          <div data-testid="message-text">{entity.messageText}</div>
+          <div data-testid="messages">
+            {entity.messages.join(",") || "empty"}
+          </div>
+          <button
+            onClick={() => entity.setChat({ name: "General" })}
+            type="button"
+          >
+            set chat
+          </button>
+          <button
+            onClick={() => entity.messageTextChanged("hello")}
+            type="button"
+          >
+            set message text
+          </button>
+          <button onClick={() => entity.sendMessagePressed()} type="button">
+            send message
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-user-id").textContent).toBe("u1");
+      expect(screen.getByTestId("chat-name").textContent).toBe("empty");
+      expect(screen.getByTestId("message-text").textContent).toBe("");
+      expect(screen.getByTestId("messages").textContent).toBe("empty");
+    });
+
+    expect(lastEntity).not.toBeNull();
+    expect(lastEntity?.chat).toBeNull();
+    expect(lastEntity?.messageText).toBe("");
+    expect(lastEntity?.messages).toStrictEqual([]);
+    expect(typeof lastEntity?.setChat).toBe("function");
+    expect(typeof lastEntity?.messageTextChanged).toBe("function");
+    expect(typeof lastEntity?.sendMessagePressed).toBe("function");
+
+    fireEvent.click(screen.getByRole("button", { name: "set chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "set message text" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("General");
+      expect(screen.getByTestId("message-text").textContent).toBe("hello");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "send message" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("messages").textContent).toBe("hello");
+    });
+
+    expect(lastEntity?.chat).toEqual({ name: "General" });
+    expect(lastEntity?.messageText).toBe("hello");
+    expect(lastEntity?.messages).toStrictEqual(["hello"]);
+    const instanceId = lastEntity?.id;
+    expect(instanceId).toBeTruthy();
+    expect(scope.getState(chatModel.$instances)).toMatchObject({
+      [instanceId!]: {
+        currentUserId: "u1",
+        chat: { name: "General" },
+        messageText: "hello",
+        messages: ["hello"],
+      },
+    });
+  });
+
   test("component maps stores to values and events to on-prefixed handlers", async () => {
     const lifecycle: string[] = [];
     const scope = fork();
@@ -343,14 +558,138 @@ describe("@effector-kit/react", () => {
     expect(lifecycle).toStrictEqual(["mounted", "unmounted"]);
   });
 
+  test("component view supports nested plain objects with units", async () => {
+    const scope = fork();
+
+    const Panel = component({
+      contract: contract({
+        title: define.store(define.schema<TString>(), ""),
+        opened: define.store(define.schema<TBoolean>(), false),
+      })(),
+      model: ({ title, opened }) => {
+        const toggle = createEvent<void>();
+
+        sample({
+          clock: toggle,
+          source: opened,
+          fn: (isOpened) => !isOpened,
+          target: opened,
+        });
+
+        return {
+          title,
+          panel: {
+            opened,
+            toggle,
+          },
+        };
+      },
+      view: ({ title, panel }) => {
+        expectTypeOf(title).toEqualTypeOf<string>();
+        expectTypeOf(panel.opened).toEqualTypeOf<boolean>();
+        expectTypeOf(panel.onToggle).toMatchTypeOf<() => void>();
+
+        return (
+          <div>
+            <div data-testid="nested-title">{title}</div>
+            <div data-testid="nested-opened">{String(panel.opened)}</div>
+            <button onClick={() => panel.onToggle()} type="button">
+              toggle nested panel
+            </button>
+          </div>
+        );
+      },
+    });
+
+    renderInScope(scope, <Panel title="Settings" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("nested-title").textContent).toBe("Settings");
+      expect(screen.getByTestId("nested-opened").textContent).toBe("false");
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "toggle nested panel" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("nested-opened").textContent).toBe("true");
+    });
+  });
+
+  test("mounted receives a typed object payload from component props", async () => {
+    const mountedPayloads: Array<{ userId: string; roomId: string }> = [];
+    const scope = fork();
+
+    const Todo = component({
+      contract: contract({
+        title: define.store(define.schema<TString>(), ""),
+        done: define.store(define.schema<TBoolean>(), false),
+      })(),
+      model: (
+        { title, done },
+        mounted: Event<{ userId: string; roomId: string }>,
+      ) => {
+        expectTypeOf(title.getState()).toEqualTypeOf<string>();
+        expectTypeOf(done.getState()).toEqualTypeOf<boolean>();
+        expectTypeOf(mounted).toMatchTypeOf<
+          Event<{ userId: string; roomId: string }>
+        >();
+
+        mounted.watch((payload) => {
+          mountedPayloads.push(payload);
+        });
+
+        return {
+          title,
+          done,
+        };
+      },
+      view: ({ title, done }) => (
+        <div>
+          <div data-testid="mounted-title">{title}</div>
+          <div data-testid="mounted-done">{String(done)}</div>
+        </div>
+      ),
+    });
+
+    expectTypeOf<Parameters<typeof Todo>[0]>().toMatchTypeOf<{
+      title?: string;
+      done?: boolean;
+      userId: string;
+      roomId: string;
+    }>();
+
+    renderInScope(
+      scope,
+      <Todo title="Ship fix" done userId="u1" roomId="room-1" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mounted-title").textContent).toBe("Ship fix");
+      expect(screen.getByTestId("mounted-done").textContent).toBe("true");
+    });
+
+    expect(mountedPayloads).toStrictEqual([
+      {
+        userId: "u1",
+        roomId: "room-1",
+      },
+    ]);
+  });
+
   test("component.create provides a controlled model handle for the model prop", async () => {
     const scope = fork();
+    const lifecycle: string[] = [];
     const Counter = component({
       contract: contract({
         count: define.store(define.schema<TNumber>(), 0),
       })(),
-      model: ({ count }) => {
+      model: ({ count }, mounted, unmounted) => {
         const setCount = createEvent<number>();
+
+        mounted.watch(() => lifecycle.push("mounted"));
+        unmounted.watch(() => lifecycle.push("unmounted"));
 
         sample({
           clock: setCount,
@@ -380,6 +719,8 @@ describe("@effector-kit/react", () => {
       expect(screen.getByTestId("count").textContent).toBe("5");
     });
 
+    expect(lifecycle).toStrictEqual(["mounted"]);
+
     fireEvent.click(
       screen.getByRole("button", { name: "set controlled count" }),
     );
@@ -388,15 +729,17 @@ describe("@effector-kit/react", () => {
       expect(screen.getByTestId("count").textContent).toBe("8");
     });
 
-    expect(Object.values(scope.getState(Counter.model.$instances))).toMatchObject([
-      { count: 8 },
-    ]);
+    expect(
+      Object.values(scope.getState(Counter.model.$instances)),
+    ).toMatchObject([{ count: 8 }]);
 
     view.unmount();
 
     await waitFor(() => {
       expect(scope.getState(Counter.model.$instances)).toStrictEqual({});
     });
+
+    expect(lifecycle).toStrictEqual(["mounted", "unmounted"]);
   });
 
   test("component.create can be used inside another component model for one owned child instance", async () => {
@@ -467,10 +810,294 @@ describe("@effector-kit/react", () => {
       expect(screen.getByTestId("page-dialog-opened").textContent).toBe("0");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "open dialog from page" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "open dialog from page" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("page-dialog-opened").textContent).toBe("1");
+    });
+  });
+
+  test("controlled component model fires mounted and unmounted through the model prop lifecycle", async () => {
+    const scope = fork();
+    const lifecycle: string[] = [];
+
+    const Dialog = component({
+      contract: contract({
+        opened: define.store(define.schema<TBoolean>(), false),
+      })(),
+      model: ({ opened }, mounted, unmounted) => {
+        const changeOpened = createEvent<boolean>();
+
+        mounted.watch(() => lifecycle.push("mounted"));
+        unmounted.watch(() => lifecycle.push("unmounted"));
+
+        sample({
+          clock: changeOpened,
+          target: opened,
+        });
+
+        return {
+          opened,
+          changeOpened,
+        };
+      },
+      view: ({ opened, onChangeOpened }) => (
+        <div>
+          <div data-testid="controlled-dialog-opened">{String(opened)}</div>
+          <button onClick={() => onChangeOpened(true)} type="button">
+            open controlled dialog
+          </button>
+        </div>
+      ),
+    });
+
+    const created = Dialog.create({ opened: false }, { scope });
+    const view = renderInScope(scope, <Dialog model={created} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("controlled-dialog-opened").textContent).toBe(
+        "false",
+      );
+    });
+
+    expect(lifecycle).toStrictEqual(["mounted"]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "open controlled dialog" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("controlled-dialog-opened").textContent).toBe(
+        "true",
+      );
+    });
+
+    view.unmount();
+
+    await waitFor(() => {
+      expect(lifecycle).toStrictEqual(["mounted", "unmounted"]);
+    });
+  });
+
+  test("todo item updates title and done through useModel with lens.ids(id)", async () => {
+    const scope = fork();
+    const todoModel = createTodoModel();
+    const $todosKeys = todoModel.$instances.map((todos) => Object.keys(todos));
+
+    function TodoItem({ id }: { id: string }) {
+      const todos = useModel(todoModel, todoModel.lens.ids(id));
+      const todo = todos[0];
+
+      if (!todo) {
+        return <div data-testid="todo-item-missing">missing</div>;
+      }
+
+      return (
+        <div>
+          <input
+            aria-label="todo-title-input"
+            value={todo.title}
+            onChange={(event) => {
+              todo.setTitle(event.target.value);
+            }}
+          />
+          <input
+            aria-label="todo-done-input"
+            checked={todo.done}
+            onChange={() => {
+              todo.changeDone();
+            }}
+            type="checkbox"
+          />
+          <div data-testid="todo-title-view">{todo.title}</div>
+          <div data-testid="todo-done-view">{String(todo.done)}</div>
+        </div>
+      );
+    }
+
+    function TodoHost() {
+      const [createTodo, todosKeys] = useUnit([todoModel.create, $todosKeys]);
+
+      if (todosKeys.length === 0) {
+        return (
+          <button
+            onClick={() => {
+              createTodo({
+                id: "todo-1",
+                data: {
+                  title: "Write tests",
+                  done: false,
+                },
+              });
+            }}
+            type="button"
+          >
+            Create first todo
+          </button>
+        );
+      }
+
+      return <TodoItem id={todosKeys[0]!} />;
+    }
+
+    renderInScope(scope, <TodoHost />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create first todo" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("todo-item-missing")).toBeNull();
+      expect(screen.getByTestId("todo-title-view").textContent).toBe(
+        "Write tests",
+      );
+      expect(screen.getByTestId("todo-done-view").textContent).toBe("false");
+      expect(
+        (screen.getByLabelText("todo-title-input") as HTMLInputElement).value,
+      ).toBe("Write tests");
+      expect(
+        (screen.getByLabelText("todo-done-input") as HTMLInputElement).checked,
+      ).toBe(false);
+    });
+
+    fireEvent.change(screen.getByLabelText("todo-title-input"), {
+      target: { value: "Review PR" },
+    });
+    fireEvent.click(screen.getByLabelText("todo-done-input"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("todo-title-view").textContent).toBe(
+        "Review PR",
+      );
+      expect(screen.getByTestId("todo-done-view").textContent).toBe("true");
+      expect(
+        (screen.getByLabelText("todo-title-input") as HTMLInputElement).value,
+      ).toBe("Review PR");
+      expect(
+        (screen.getByLabelText("todo-done-input") as HTMLInputElement).checked,
+      ).toBe(true);
+      expect(scope.getState(todoModel.$instances)).toMatchObject({
+        "todo-1": {
+          title: "Review PR",
+          done: true,
+        },
+      });
+    });
+  });
+
+  test("todo list creates independent todos and TodoItem updates them by id", async () => {
+    const scope = fork();
+    const todoModel = createTodoModel();
+    const $todosKeys = todoModel.$instances.map((todos) => Object.keys(todos));
+    let nextId = 1;
+
+    function TodoItem({ id }: { id: string }) {
+      const todos = useModel(todoModel, todoModel.lens.ids(id));
+      const [deleteTodo] = useUnit([todoModel.delete]);
+      const todo = todos[0];
+
+      if (!todo) {
+        return null;
+      }
+
+      return (
+        <li data-testid={`todo-item-${id}`}>
+          <input
+            aria-label={`todo-title-input-${id}`}
+            value={todo.title}
+            onChange={(event) => {
+              todo.setTitle(event.target.value);
+            }}
+          />
+          <input
+            aria-label={`todo-done-input-${id}`}
+            checked={todo.done}
+            onChange={() => {
+              todo.changeDone();
+            }}
+            type="checkbox"
+          />
+          <span data-testid={`todo-title-view-${id}`}>{todo.title}</span>
+          <span data-testid={`todo-done-view-${id}`}>{String(todo.done)}</span>
+          <button
+            onClick={() => {
+              deleteTodo(id);
+            }}
+            type="button"
+          >
+            Delete todo {id}
+          </button>
+        </li>
+      );
+    }
+
+    function TodoList() {
+      const [createTodo, todosKeys] = useUnit([todoModel.create, $todosKeys]);
+
+      return (
+        <>
+          <button
+            onClick={() => {
+              const id = `todo-${nextId++}`;
+              createTodo({
+                id,
+                data: { title: "", done: false },
+              });
+            }}
+            type="button"
+          >
+            Create todo
+          </button>
+          <ul>
+            {todosKeys.map((key) => (
+              <TodoItem id={key} key={key} />
+            ))}
+          </ul>
+        </>
+      );
+    }
+
+    renderInScope(scope, <TodoList />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create todo" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("todo-item-todo-1")).toBeTruthy();
+      expect(
+        (screen.getByLabelText("todo-title-input-todo-1") as HTMLInputElement)
+          .value,
+      ).toBe("");
+      expect(screen.getByTestId("todo-title-view-todo-1").textContent).toBe("");
+      expect(screen.getByTestId("todo-done-view-todo-1").textContent).toBe(
+        "false",
+      );
+    });
+
+    fireEvent.change(screen.getByLabelText("todo-title-input-todo-1"), {
+      target: { value: "Learn Effector" },
+    });
+    fireEvent.click(screen.getByLabelText("todo-done-input-todo-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("todo-title-view-todo-1").textContent).toBe(
+        "Learn Effector",
+      );
+      expect(screen.getByTestId("todo-done-view-todo-1").textContent).toBe(
+        "true",
+      );
+      expect(scope.getState(todoModel.$instances)).toMatchObject({
+        "todo-1": {
+          title: "Learn Effector",
+          done: true,
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete todo todo-1" }));
+
+    await waitFor(() => {
+      expect(scope.getState(todoModel.$instances)).toStrictEqual({});
+      expect(screen.queryByTestId("todo-item-todo-1")).toBeNull();
     });
   });
 
@@ -560,7 +1187,10 @@ describe("@effector-kit/react", () => {
       })(),
       model: ({ title }) => {
         const cards = child(CounterCard.model);
-        const createCard = createEvent<{ id: string; data: { count: number } }>();
+        const createCard = createEvent<{
+          id: string;
+          data: { count: number };
+        }>();
         const setCardsCount = createEvent<number>();
 
         sample({

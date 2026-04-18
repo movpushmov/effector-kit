@@ -38,7 +38,20 @@ function primeStoreScopes(
     if (!is.store(apiElement)) continue;
 
     const rootId = (apiElement as any).graphite.meta.rootStateRefId;
-    const instanceValue = instance[key] ?? null;
+    const field = (apiElement as any)["~field"];
+    let instanceValue: unknown;
+
+    if (key in instance) {
+      instanceValue = instance[key];
+    } else if (typeof field === "string" && field in instance) {
+      instanceValue = instance[field];
+    } else {
+      try {
+        instanceValue = apiElement.getState();
+      } catch {
+        instanceValue = null;
+      }
+    }
 
     if (!scopeReg[rootId]) {
       // Effector lazily creates scope.reg entries using the store's default

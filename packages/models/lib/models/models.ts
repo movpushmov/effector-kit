@@ -1,4 +1,10 @@
-import { createEvent, createStore, sample, type StoreWritable } from "effector";
+import {
+  createEvent,
+  createStore,
+  is,
+  sample,
+  type StoreWritable,
+} from "effector";
 import type { Contract } from "../contracts";
 import type {
   ContractApi,
@@ -8,7 +14,7 @@ import type {
   Model,
   ModelApi,
 } from "./types";
-import { modifyDeclarations, getEntityId } from "../runtime";
+import { modifyDeclarations, getEntityId, modifyStore } from "../runtime";
 import { createApi, createStaticApi } from "./create-api";
 import { lens } from "../lens";
 
@@ -31,10 +37,28 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
 
   const deleteInstance = createEvent<string | string[]>();
 
+  const localStoreDefaults: Record<string, unknown> = {};
+
   const { result: modelApi } = modifyDeclarations(() => {
     const api = createApi(contract);
+    const result = fn(api);
 
-    return fn(api);
+    for (const [key, element] of Object.entries(result)) {
+      if (!is.store(element)) {
+        continue;
+      }
+
+      if (!(key in contract.shape)) {
+        localStoreDefaults[key] = element.getState();
+        Object.defineProperty(element, "~field", {
+          value: key,
+          configurable: true,
+        });
+        modifyStore(element, key);
+      }
+    }
+
+    return result;
   });
 
   sample({
@@ -45,7 +69,10 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
       const copy = { ...instances };
 
       for (const instance of newInstances) {
-        copy[instance.id] = instance.data;
+        copy[instance.id] = {
+          ...localStoreDefaults,
+          ...instance.data,
+        };
       }
 
       return copy;

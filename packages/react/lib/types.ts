@@ -22,28 +22,30 @@ import type { ReactNode } from "react";
 import { reactCreatedModelMeta } from "./meta";
 
 type ContractInput = Contract<any> | (() => Contract<any>);
+type MountedProps<Mounted extends object | void> = [Mounted] extends [void]
+  ? {}
+  : Mounted;
 
 export type InferContract<Input extends ContractInput> =
   Input extends Contract<any>
     ? Input
     : Input extends (...args: any[]) => infer Result
-      ? Result extends Contract<any>
-        ? Result
-        : never
-      : never;
+    ? Result extends Contract<any>
+      ? Result
+      : never
+    : never;
 
 type Handler<Payload> = [Payload] extends [void]
   ? () => void
   : (payload: Payload) => void;
 
-type UnitHandler<Unit> =
-  Unit extends EventCallable<infer Payload>
-    ? Handler<Payload>
-    : Unit extends Event<infer Payload>
-      ? Handler<Payload>
-      : Unit extends Effect<infer Params, any, any>
-        ? Handler<Params>
-        : never;
+type UnitHandler<Unit> = Unit extends EventCallable<infer Payload>
+  ? Handler<Payload>
+  : Unit extends Event<infer Payload>
+  ? Handler<Payload>
+  : Unit extends Effect<infer Params, any, any>
+  ? Handler<Params>
+  : never;
 
 export interface ReactModelHandle<T extends Model<any, any>> {
   "~kind": "react-model";
@@ -53,25 +55,24 @@ export interface ReactModelHandle<T extends Model<any, any>> {
   scope?: Scope | undefined;
 }
 
-type CreatedModelUnitValue<Element> =
-  Element extends StoreWritable<any>
-    ? Element
-    : Element extends Store<any>
-      ? Element
-      : Element extends EventCallable<any> | Event<any> | Effect<any, any, any>
-        ? Element
-        : Element extends Model<any, any>
-          ? Element
-          : Element extends Ref<any>
-            ? Element
-            : Element extends ModelApi
-              ? CreatedModelApi<Element>
-              : never;
+type CreatedModelUnitValue<Element> = Element extends StoreWritable<any>
+  ? Element
+  : Element extends Store<any>
+  ? Element
+  : Element extends EventCallable<any> | Event<any> | Effect<any, any, any>
+  ? Element
+  : Element extends Model<any, any>
+  ? Element
+  : Element extends Ref<any>
+  ? Element
+  : Element extends ModelApi
+  ? CreatedModelApi<Element>
+  : never;
 
 export type CreatedModelApi<Api extends ModelApi> = {
-  [K in keyof Api as K extends `$$${string}` ? never : K]: CreatedModelUnitValue<
-    Api[K]
-  >;
+  [K in keyof Api as K extends `$$${string}`
+    ? never
+    : K]: CreatedModelUnitValue<Api[K]>;
 };
 
 export interface CreatedModelMeta<T extends Model<any, any>> {
@@ -80,14 +81,21 @@ export interface CreatedModelMeta<T extends Model<any, any>> {
   ownedId: string;
 }
 
+export type CreatedModelInput<T extends Model<any, any>> = {
+  [reactCreatedModelMeta]: CreatedModelMeta<T>;
+};
+
 export type CreatedModel<T extends Model<any, any>> = CreatedModelApi<
   T["~api"]
 > & {
   [reactCreatedModelMeta]: CreatedModelMeta<T>;
 };
 
-type UnionModels<T extends Union<UnionMap>> =
-  T extends Union<infer Models extends UnionMap> ? Models : never;
+type UnionModels<T extends Union<UnionMap>> = T extends Union<
+  infer Models extends UnionMap
+>
+  ? Models
+  : never;
 
 type ResolvedUnionEntity<T extends Union<UnionMap>> = {
   [K in keyof UnionModels<T>]: ReactModelEntity<UnionModels<T>[K]> & {
@@ -99,23 +107,24 @@ type ResolvedRefValue<T extends Model<any, any> | Union<UnionMap>> =
   T extends Model<any, any>
     ? Array<ReactModelEntity<T>>
     : T extends Union<UnionMap>
-      ? Array<ResolvedUnionEntity<T>>
-      : never;
+    ? Array<ResolvedUnionEntity<T>>
+    : never;
 
-type ResolvedModelValue<Element> =
-  Element extends StoreWritable<any>
-    ? StoreValue<Element>
-    : Element extends Store<any>
-      ? StoreValue<Element>
-      : Element extends Event<any> | EventCallable<any> | Effect<any, any, any>
-        ? UnitHandler<Element>
-        : Element extends Model<any, any>
-          ? Array<ReactModelEntity<Element>>
-          : Element extends CreatedModel<infer TargetModel>
-            ? ReactModelEntity<TargetModel>
-          : Element extends Ref<infer Target>
-            ? ResolvedRefValue<Target>
-            : never;
+type ResolvedModelValue<Element> = Element extends StoreWritable<any>
+  ? StoreValue<Element>
+  : Element extends Store<any>
+  ? StoreValue<Element>
+  : Element extends Event<any> | EventCallable<any> | Effect<any, any, any>
+  ? UnitHandler<Element>
+  : Element extends Model<any, any>
+  ? Array<ReactModelEntity<Element>>
+  : Element extends CreatedModel<infer TargetModel>
+  ? ReactModelEntity<TargetModel>
+  : Element extends Ref<infer Target>
+  ? ResolvedRefValue<Target>
+  : Element extends ModelApi
+  ? ReactModelValue<Element>
+  : never;
 
 export type ReactModelValue<Api extends ModelApi> = {
   [K in keyof Api as K extends `$$${string}` ? never : K]: ResolvedModelValue<
@@ -127,30 +136,31 @@ export type ReactModelEntity<T extends Model<any, any>> = {
   id: string;
 } & ReactModelValue<T["~api"]>;
 
-type ComponentUnitValue<Element> =
-  Element extends StoreWritable<any>
-    ? StoreValue<Element>
-    : Element extends Store<any>
-      ? StoreValue<Element>
-      : Element extends Model<any, any>
-        ? Array<ComponentViewEntity<Element>>
-        : Element extends CreatedModel<infer TargetModel>
-          ? ComponentViewEntity<TargetModel>
-        : Element extends Ref<infer Target>
-          ? Target extends Model<any, any>
-            ? Array<ComponentViewEntity<Target>>
-            : Target extends Union<UnionMap>
-              ? Array<
-                  {
-                    [K in keyof UnionModels<Target>]: ComponentViewEntity<
-                      UnionModels<Target>[K]
-                    > & {
-                      variant: K;
-                    };
-                  }[keyof UnionModels<Target>]
-                >
-              : never
-          : never;
+type ComponentUnitValue<Element> = Element extends StoreWritable<any>
+  ? StoreValue<Element>
+  : Element extends Store<any>
+  ? StoreValue<Element>
+  : Element extends Model<any, any>
+  ? Array<ComponentViewEntity<Element>>
+  : Element extends CreatedModel<infer TargetModel>
+  ? ComponentViewEntity<TargetModel>
+  : Element extends Ref<infer Target>
+  ? Target extends Model<any, any>
+    ? Array<ComponentViewEntity<Target>>
+    : Target extends Union<UnionMap>
+    ? Array<
+        {
+          [K in keyof UnionModels<Target>]: ComponentViewEntity<
+            UnionModels<Target>[K]
+          > & {
+            variant: K;
+          };
+        }[keyof UnionModels<Target>]
+      >
+    : never
+  : Element extends ModelApi
+  ? ComponentViewValue<Element>
+  : never;
 
 type ComponentUnitHandlerName<Key extends string> = `on${Capitalize<Key>}`;
 
@@ -158,22 +168,30 @@ export type ComponentViewValue<Api extends ModelApi> = {
   [K in keyof Api as K extends `$$${string}`
     ? never
     : Api[K] extends Event<any> | EventCallable<any> | Effect<any, any, any>
-      ? never
-      : K]: ComponentUnitValue<Api[K]>;
+    ? never
+    : K]: ComponentUnitValue<Api[K]>;
 } & {
   [K in keyof Api as K extends `$$${string}`
     ? never
     : Api[K] extends Event<any> | EventCallable<any> | Effect<any, any, any>
-      ? ComponentUnitHandlerName<string & K>
-      : never]: UnitHandler<Api[K]>;
+    ? ComponentUnitHandlerName<string & K>
+    : never]: UnitHandler<Api[K]>;
 };
 
 export type ComponentViewEntity<T extends Model<any, any>> = {
   id: string;
 } & ComponentViewValue<T["~api"]>;
 
-export interface UseModelOptions<T extends Model<any, any>> {
+export type ComponentViewEntityFromApi<Api extends ModelApi> = {
+  id: string;
+} & ComponentViewValue<Api>;
+
+export interface UseModelOptions<
+  T extends Model<any, any>,
+  Mounted extends object = {},
+> {
   data?: Partial<ContractData<T["~contract"]>>;
+  mounted?: Mounted;
   scope?: Scope;
 }
 
@@ -185,27 +203,29 @@ export interface ComponentCreateOptions {
 export interface ComponentConfig<
   Input extends ContractInput,
   Api extends ModelApi,
+  Mounted extends object | void = void,
 > {
   contract: Input;
   model: (
     api: ContractApi<InferContract<Input>>,
-    mounted: EventCallable<void>,
-    unmounted: EventCallable<void>,
+    mounted: Event<Mounted>,
+    unmounted: Event<void>,
   ) => Api;
-  view: (
-    props: ComponentViewEntity<Model<InferContract<Input>, Api>>,
-  ) => ReactNode;
+  view: (props: ComponentViewEntityFromApi<Api>) => ReactNode;
 }
 
-export type ComponentProps<T extends Model<any, any>> = Partial<
-  ContractData<T["~contract"]>
-> & {
-  model?: ReactModelHandle<T> | CreatedModel<T>;
-};
+export type ComponentProps<
+  T extends Model<any, any>,
+  Mounted extends object | void = void,
+> = Partial<ContractData<T["~contract"]>> &
+  MountedProps<Mounted> & {
+    model?: ReactModelHandle<T> | CreatedModelInput<T>;
+  };
 
-export type ModelComponent<T extends Model<any, any>> = ((
-  props: ComponentProps<T>,
-) => ReactNode) & {
+export type ModelComponent<
+  T extends Model<any, any>,
+  Mounted extends object | void = void,
+> = ((props: ComponentProps<T, Mounted>) => ReactNode) & {
   create(
     data?: Partial<ContractData<T["~contract"]>>,
     options?: ComponentCreateOptions,
