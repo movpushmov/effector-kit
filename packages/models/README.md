@@ -245,6 +245,31 @@ selection.lens.where((entity, _, ctx) => {
 });
 ```
 
+### `lens.ids(...)`
+
+Filters instances by explicit ids.
+
+For regular model lenses, pass instance ids directly:
+
+```ts
+counterModel.lens.ids("a").count.target();
+counterModel.lens.ids("a", "c").count.target();
+```
+
+For union lenses, pass namespaced ids created with `uniqueId(...)`:
+
+```ts
+selection.lens
+  .ids(
+    selection.lens.uniqueId("counter", "a"),
+    selection.lens.uniqueId("flagged", "f1"),
+  )
+  .match({
+    counter: (counter) => counter.count.target(),
+    flagged: (flagged) => flagged.score.target(),
+  });
+```
+
 ### `lens.first()` / `lens.last()`
 
 Restricts the selection to one matched instance.
@@ -424,6 +449,7 @@ const selection = ref(
 Union lenses support:
 
 - `only(...)`
+- `ids(...)`
 - `where(...)`
 - `first()`
 - `last()`
