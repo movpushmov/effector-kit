@@ -137,6 +137,7 @@ function createDashboardModel() {
         setSelectedCount,
         deleteSelected,
         selectedCountChanged: selected.lens.count.clock(),
+        selected,
       };
     },
   });
@@ -668,6 +669,66 @@ describe("models api", () => {
       expect(scope.getState(counterModel.$instances)).toMatchObject({
         a: { count: 1 },
         b: { count: 20 },
+      });
+    });
+
+    test("does not duplicate tracked ref ids when tracking the same id repeatedly", async () => {
+      const scope = fork();
+
+      await createInstances(scope, counterModel.create, [
+        { id: "a", data: { count: 1 } },
+        { id: "b", data: { count: 2 } },
+      ]);
+
+      const dashboardModel = createDashboardModel();
+
+      await createInstances(scope, dashboardModel.create, [
+        { id: "d1", data: { name: "Dashboard #1" } },
+      ]);
+
+      await allSettled(
+        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        {
+          scope,
+          params: "a",
+        },
+      );
+
+      await allSettled(
+        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        {
+          scope,
+          params: "a",
+        },
+      );
+
+      await allSettled(
+        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        {
+          scope,
+          params: "a",
+        },
+      );
+
+      await allSettled(
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .setSelectedCount.target(),
+        {
+          scope,
+          params: 10,
+        },
+      );
+
+      expect(scope.getState(counterModel.$instances)).toStrictEqual({
+        a: { count: 10 },
+        b: { count: 2 },
+      });
+
+      const counterModelRefId = dashboardModel["~api"].selected["~id"];
+
+      expect(scope.getState(dashboardModel.$instances)).toMatchObject({
+        d1: { name: "Dashboard #1", "~refs": { [counterModelRefId]: ["a"] } },
       });
     });
 

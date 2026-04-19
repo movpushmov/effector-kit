@@ -122,6 +122,8 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
       sample({
         clock: addKey,
         source: $ids,
+        filter: (ids, id) =>
+          !ids.some((item) => item.key === key && item.id === id),
         fn: (ids, id) => [...ids, { key, id }],
         target: $ids,
       });
@@ -160,6 +162,7 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
   sample({
     clock: add,
     source: $ids,
+    filter: (ids, id) => !ids.includes(id),
     fn: (ids, id) => [...ids, id],
     target: $ids,
   });
