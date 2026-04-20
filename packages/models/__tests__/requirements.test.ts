@@ -1,8 +1,29 @@
-import { describe, test, expect } from "vitest";
-import { child, contract, define, model, ref, union } from "../lib";
+import { describe, test, expect, expectTypeOf, vi } from "vitest";
+import {
+  child,
+  contract,
+  define,
+  model,
+  ref,
+  union,
+  withInstanceContext,
+} from "../lib";
 import { lens } from "../lib/lens";
-import { type TBoolean, type TNumber, type TString } from "../lib/type-schema";
-import { allSettled, createEvent, fork, sample, type EventCallable } from "effector";
+import {
+  type TBoolean,
+  type TNumber,
+  type TString,
+  type TStatic,
+} from "../lib/type-schema";
+import {
+  allSettled,
+  combine,
+  createEvent,
+  createStore,
+  fork,
+  sample,
+  type EventCallable,
+} from "effector";
 
 async function createInstances(
   scope: ReturnType<typeof fork>,
@@ -323,14 +344,471 @@ function getChildInstancesByParent(
   childModel: { ["~id"]: string },
   parentId: string,
 ) {
-  return (
-    scope.getState(parentModel.$instances as any)[parentId]?.["~children"]?.[
-      childModel["~id"]
-    ] ?? {}
-  );
+  const parentInstances = scope.getState(
+    parentModel.$instances as any,
+  ) as Record<string, any>;
+
+  return parentInstances[parentId]?.["~children"]?.[childModel["~id"]] ?? {};
 }
 
 describe("models api", () => {
+  test("contract events keep concrete payload types in model fn", () => {
+    const chatInfoModel = model({
+      contract: contract({
+        mounted: define.event(define.schema<TStatic<{ id: string }>>()),
+      })(),
+      fn: ({ mounted }) => {
+        expectTypeOf(mounted).toMatchTypeOf<EventCallable<{ id: string }>>();
+
+        return { mounted };
+      },
+    });
+
+    expect(chatInfoModel).toBeDefined();
+  });
+
+  test("model can call external units with correct instance-scoped source data", async () => {
+    const externalReported = createEvent<{ count: number; label: string }>();
+    const $externalSnapshot = createStore<string | null>(null);
+    const seen: Array<{ count: number; label: string }> = [];
+
+    externalReported.watch((payload) => {
+      seen.push(payload);
+    });
+
+    const reportModel = model({
+      contract: contract({
+        count: define.store(define.schema<TNumber>(), 0),
+      })(),
+      fn: ({ count }) => {
+        const report = createEvent<string>();
+
+        sample({
+          clock: report,
+          source: count,
+          fn: (value, label) => ({ count: value, label }),
+          target: externalReported,
+        });
+
+        sample({
+          clock: report,
+          source: count,
+          fn: (value, label) => `${label}:${value}`,
+          target: $externalSnapshot,
+        });
+
+        return {
+          count,
+          report,
+        };
+      },
+    });
+
+    const scope = fork();
+
+    await allSettled(reportModel.create, {
+      scope,
+      params: [
+        { id: "a", data: { count: 1 } },
+        { id: "b", data: { count: 2 } },
+      ],
+    });
+
+    await allSettled(
+      reportModel.lens.where((entity) => entity.id === "b").report.target(),
+      {
+        scope,
+        params: "selected",
+      },
+    );
+
+    expect(seen).toStrictEqual([{ count: 2, label: "selected" }]);
+    expect(scope.getState($externalSnapshot)).toBe("selected:2");
+  });
+
+  test("subscription to external unit applies to all model instances", async () => {
+    const incrementAll = createEvent<number>();
+
+    const syncedCounterModel = model({
+      contract: contract({
+        count: define.store(define.schema<TNumber>(), 0),
+      })(),
+      fn: ({ count }) => {
+        sample({
+          clock: incrementAll,
+          source: count,
+          fn: (value, delta) => value + delta,
+          target: count,
+        });
+
+        return {
+          count,
+        };
+      },
+    });
+
+    const scope = fork();
+
+    await allSettled(syncedCounterModel.create, {
+      scope,
+      params: [
+        { id: "a", data: { count: 1 } },
+        { id: "b", data: { count: 5 } },
+        { id: "c", data: { count: 10 } },
+      ],
+    });
+
+    await allSettled(incrementAll, {
+      scope,
+      params: 3,
+    });
+
+    expect(scope.getState(syncedCounterModel.$instances)).toStrictEqual({
+      a: { count: 4 },
+      b: { count: 8 },
+      c: { count: 13 },
+    });
+  });
+
+  test("derived stores recompute inside model instances without ui", async () => {
+    const profileModel = model({
+      contract: contract({
+        firstName: define.store(define.schema<TString>(), ""),
+        lastName: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ firstName, lastName }) => {
+        const firstNameChanged = createEvent<string>();
+        const lastNameChanged = createEvent<string>();
+        const $fullName = combine(firstName, lastName, (first, last) =>
+          `${first} ${last}`.trim(),
+        );
+        const $fullNameUpper = $fullName.map((value) => value.toUpperCase());
+
+        sample({
+          clock: firstNameChanged,
+          target: firstName,
+        });
+
+        sample({
+          clock: lastNameChanged,
+          target: lastName,
+        });
+
+        return {
+          firstName,
+          lastName,
+          $fullName,
+          $fullNameUpper,
+          firstNameChanged,
+          lastNameChanged,
+        };
+      },
+    });
+
+    const scope = fork();
+
+    await createInstances(scope, profileModel.create, [
+      {
+        id: "profile-1",
+        data: { firstName: "Ada", lastName: "Lovelace" },
+      },
+    ]);
+
+    const readInstance = () => {
+      const instance = scope.getState(profileModel.$instances)["profile-1"];
+
+      if (!instance) {
+        throw new Error("profile-1 instance is missing");
+      }
+
+      return withInstanceContext(profileModel, instance, () => ({
+        fullName: profileModel["~api"].$fullName.getState(),
+        fullNameUpper: profileModel["~api"].$fullNameUpper.getState(),
+      }));
+    };
+
+    expect(readInstance()).toStrictEqual({
+      fullName: "Ada Lovelace",
+      fullNameUpper: "ADA LOVELACE",
+    });
+
+    await allSettled(
+      profileModel.lens
+        .where((entity) => entity.id === "profile-1")
+        .firstNameChanged.target(),
+      {
+        scope,
+        params: "Grace",
+      },
+    );
+
+    expect(readInstance()).toStrictEqual({
+      fullName: "Grace Lovelace",
+      fullNameUpper: "GRACE LOVELACE",
+    });
+  });
+
+  test("derived store watch receives updated value inside model instance", async () => {
+    const scope = fork();
+    const watcher = vi.fn();
+
+    const profileModel = model({
+      contract: contract({
+        firstName: define.store(define.schema<TString>(), ""),
+        lastName: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ firstName, lastName }) => {
+        const firstNameChanged = createEvent<string>();
+        const $fullName = combine(firstName, lastName, (first, last) =>
+          `${first} ${last}`.trim(),
+        );
+
+        sample({
+          clock: firstNameChanged,
+          target: firstName,
+        });
+
+        $fullName.watch(watcher);
+
+        return {
+          firstName,
+          lastName,
+          $fullName,
+          firstNameChanged,
+        };
+      },
+    });
+
+    watcher.mockClear();
+
+    await createInstances(scope, profileModel.create, [
+      {
+        id: "profile-1",
+        data: { firstName: "Ada", lastName: "Lovelace" },
+      },
+    ]);
+
+    watcher.mockClear();
+
+    await allSettled(
+      profileModel.lens
+        .where((entity) => entity.id === "profile-1")
+        .firstNameChanged.target(),
+      {
+        scope,
+        params: "Grace",
+      },
+    );
+
+    expect(watcher).toHaveBeenCalled();
+    expect(watcher.mock.calls.at(-1)).toStrictEqual(["Grace Lovelace"]);
+  });
+
+  test("derived store updates trigger downstream graph inside model instances", async () => {
+    const profileModel = model({
+      contract: contract({
+        firstName: define.store(define.schema<TString>(), ""),
+        lastName: define.store(define.schema<TString>(), ""),
+        lastDerivedValue: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ firstName, lastName, lastDerivedValue }) => {
+        const firstNameChanged = createEvent<string>();
+        const lastNameChanged = createEvent<string>();
+        const $fullName = combine(firstName, lastName, (first, last) =>
+          `${first} ${last}`.trim(),
+        );
+
+        sample({
+          clock: firstNameChanged,
+          target: firstName,
+        });
+
+        sample({
+          clock: lastNameChanged,
+          target: lastName,
+        });
+
+        sample({
+          clock: $fullName.updates,
+          target: lastDerivedValue,
+        });
+
+        return {
+          firstName,
+          lastName,
+          lastDerivedValue,
+          $fullName,
+          firstNameChanged,
+          lastNameChanged,
+        };
+      },
+    });
+
+    const scope = fork();
+
+    await createInstances(scope, profileModel.create, [
+      {
+        id: "profile-1",
+        data: { firstName: "Ada", lastName: "Lovelace" },
+      },
+    ]);
+
+    await allSettled(
+      profileModel.lens
+        .where((entity) => entity.id === "profile-1")
+        .firstNameChanged.target(),
+      {
+        scope,
+        params: "Grace",
+      },
+    );
+
+    const instance = scope.getState(profileModel.$instances)["profile-1"];
+
+    expect(instance).toBeDefined();
+    expect(instance!.lastDerivedValue).toBe("Grace Lovelace");
+
+    const values = withInstanceContext(
+      profileModel,
+      instance!,
+      () => ({
+        fullName: profileModel["~api"].$fullName.getState(),
+        lastDerivedValue: profileModel["~api"].lastDerivedValue.getState(),
+      }),
+      scope,
+    );
+
+    expect(values).toStrictEqual({
+      fullName: "Grace Lovelace",
+      lastDerivedValue: "Grace Lovelace",
+    });
+  });
+
+  test("nested factory stores propagate derived updates inside model instances", async () => {
+    function createHeaderModel() {
+      const $chat = createStore<{ name: string } | null>(null);
+      const $typingUsers = createStore<string[]>([]);
+      const chatChanged = createEvent<{ name: string } | null>();
+      const typingUsersChanged = createEvent<string[]>();
+      const $chatName = $chat.map((chat) => chat?.name ?? "");
+      const $chatSubtitle = combine(
+        $chat,
+        $typingUsers,
+        (chat, typingUsers) => {
+          if (!chat) {
+            return "";
+          }
+
+          return typingUsers.length > 0 ? "typing..." : chat.name;
+        },
+      );
+
+      sample({
+        clock: chatChanged,
+        target: $chat,
+      });
+
+      sample({
+        clock: typingUsersChanged,
+        target: $typingUsers,
+      });
+
+      return {
+        $chat,
+        $typingUsers,
+        $chatName,
+        $chatSubtitle,
+        chatChanged,
+        typingUsersChanged,
+      };
+    }
+
+    const screenModel = model({
+      contract: contract({
+        lastHeaderTitle: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ lastHeaderTitle }) => {
+        const header = createHeaderModel();
+
+        sample({
+          clock: header.$chatName.updates,
+          target: lastHeaderTitle,
+        });
+
+        return {
+          lastHeaderTitle,
+          header,
+        };
+      },
+    });
+
+    const scope = fork();
+
+    await createInstances(scope, screenModel.create, [
+      {
+        id: "screen-1",
+        data: { lastHeaderTitle: "" },
+      },
+    ]);
+
+    await allSettled(
+      screenModel.lens
+        .where((entity) => entity.id === "screen-1")
+        .header.chatChanged.target(),
+      {
+        scope,
+        params: { name: "General" },
+      },
+    );
+
+    const instance = scope.getState(screenModel.$instances)["screen-1"];
+
+    expect(instance).toBeDefined();
+    expect(instance!["lastHeaderTitle"]).toBe("General");
+
+    const values = withInstanceContext(
+      screenModel,
+      instance!,
+      () => ({
+        chatName: screenModel["~api"].header.$chatName.getState(),
+        chatSubtitle: screenModel["~api"].header.$chatSubtitle.getState(),
+        lastHeaderTitle: screenModel["~api"].lastHeaderTitle.getState(),
+      }),
+      scope,
+    );
+
+    expect(values).toStrictEqual({
+      chatName: "General",
+      chatSubtitle: "General",
+      lastHeaderTitle: "General",
+    });
+
+    await allSettled(
+      screenModel.lens
+        .where((entity) => entity.id === "screen-1")
+        .header.typingUsersChanged.target(),
+      {
+        scope,
+        params: ["u1"],
+      },
+    );
+
+    const nextValues = withInstanceContext(
+      screenModel,
+      instance!,
+      () => ({
+        chatSubtitle: screenModel["~api"].header.$chatSubtitle.getState(),
+        lastHeaderTitle: screenModel["~api"].lastHeaderTitle.getState(),
+      }),
+      scope,
+    );
+
+    expect(nextValues).toStrictEqual({
+      chatSubtitle: "typing...",
+      lastHeaderTitle: "General",
+    });
+  });
+
   describe("instances", () => {
     test("create instance", async () => {
       const scope = fork();
@@ -386,9 +864,7 @@ describe("models api", () => {
       ]);
 
       await allSettled(
-        todoList.lens
-          .where((e) => e.id === "a" || e.id === "b")
-          .delete(),
+        todoList.lens.where((e) => e.id === "a" || e.id === "b").delete(),
         {
           scope,
         },
@@ -451,7 +927,9 @@ describe("models api", () => {
       ]);
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .track.target(),
         {
           scope,
           params: "a",
@@ -488,7 +966,9 @@ describe("models api", () => {
       ]);
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .track.target(),
         {
           scope,
           params: "a",
@@ -536,7 +1016,9 @@ describe("models api", () => {
       ]);
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .track.target(),
         {
           scope,
           params: "a",
@@ -544,7 +1026,9 @@ describe("models api", () => {
       );
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .track.target(),
         {
           scope,
           params: "c",
@@ -583,7 +1067,9 @@ describe("models api", () => {
       ]);
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .track.target(),
         {
           scope,
           params: "a",
@@ -591,7 +1077,9 @@ describe("models api", () => {
       );
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .track.target(),
         {
           scope,
           params: "b",
@@ -640,7 +1128,9 @@ describe("models api", () => {
       ]);
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d1")
+          .track.target(),
         {
           scope,
           params: "a",
@@ -648,7 +1138,9 @@ describe("models api", () => {
       );
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d2").track.target(),
+        dashboardModel.lens
+          .where((entity) => entity.id === "d2")
+          .track.target(),
         {
           scope,
           params: "b",
@@ -1051,7 +1543,9 @@ describe("models api", () => {
         ]);
 
         await allSettled(
-          counterModel.lens.where((entity) => entity.id === "a").setCount.target(),
+          counterModel.lens
+            .where((entity) => entity.id === "a")
+            .setCount.target(),
           {
             scope,
             params: 7,
@@ -1079,7 +1573,9 @@ describe("models api", () => {
         ]);
 
         await allSettled(
-          dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+          dashboardModel.lens
+            .where((entity) => entity.id === "d1")
+            .track.target(),
           {
             scope,
             params: "b",
@@ -1177,7 +1673,9 @@ describe("models api", () => {
         ]);
 
         await allSettled(
-          dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+          dashboardModel.lens
+            .where((entity) => entity.id === "d1")
+            .track.target(),
           {
             scope,
             params: "a",
@@ -1357,6 +1855,46 @@ describe("models api", () => {
           b: { count: 2 },
           c: { count: 60 },
         });
+      });
+
+      test("recursively exposes nested stores and events in lens api", async () => {
+        const scope = fork();
+        const seen: number[] = [];
+
+        nestedCounterModel.lens.form.count.clock().watch((value) => {
+          seen.push(value);
+        });
+
+        await createInstances(scope, nestedCounterModel.create, [
+          { id: "a", data: { count: 1 } },
+          { id: "b", data: { count: 4 } },
+        ]);
+
+        await allSettled(
+          nestedCounterModel.lens
+            .where((entity) => entity.id === "a")
+            .form.actions.setCount.target(),
+          {
+            scope,
+            params: 5,
+          },
+        );
+
+        await allSettled(
+          nestedCounterModel.lens
+            .where((entity) => entity.id === "b")
+            .form.actions.setCount.target(),
+          {
+            scope,
+            params: 7,
+          },
+        );
+
+        expect(scope.getState(nestedCounterModel.$instances)).toMatchObject({
+          a: { count: 5 },
+          b: { count: 7 },
+        });
+        expect(seen).toEqual([5, 7]);
       });
     });
 
@@ -1884,4 +2422,36 @@ describe("models api", () => {
       });
     });
   });
+});
+
+const nestedCounterModel = model({
+  contract: contract({
+    count: define.store(define.schema<TNumber>(), 0),
+  })(),
+  fn: ({ count }) => {
+    const setCount = createEvent<number>();
+    const increment = createEvent<void>();
+
+    sample({
+      clock: setCount,
+      target: count,
+    });
+
+    sample({
+      clock: increment,
+      source: count,
+      fn: (value) => value + 1,
+      target: count,
+    });
+
+    return {
+      form: {
+        count,
+        actions: {
+          setCount,
+          increment,
+        },
+      },
+    };
+  },
 });

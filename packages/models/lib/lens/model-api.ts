@@ -35,12 +35,84 @@ interface ModelApiOptions<T extends Model<any, ModelApi>> {
   model: T;
   getInstances: (payload: any) => Record<string, any>;
   getTargetModel: () => Model<any, any>;
+  getContextModelId: () => string;
+}
+
+function createElementActions(
+  element: unknown,
+  model: Model<any, any>,
+  getInstances: (payload: any) => Record<string, any>,
+  getTargetModel: () => Model<any, any>,
+  getContextModelId: () => string,
+): unknown {
+  if (is.store(element) || is.event(element)) {
+    const actions: any = {
+      clock() {
+        return createClock(
+          element as any,
+          model,
+          getInstances,
+          getContextModelId,
+        );
+      },
+    };
+
+    if (is.targetable(element)) {
+      actions.target = (map?: (payload: any) => any) =>
+        createTarget(
+          element as any,
+          model,
+          getInstances,
+          getTargetModel,
+          getContextModelId,
+          map,
+        );
+    }
+
+    return actions;
+  }
+
+  if (modelIs.model(element)) {
+    const nestedLens = lens(element);
+
+    (nestedLens as any)["~setSource"]?.({
+      source: element.$instances,
+      getSource: (payload: any) =>
+        collectNestedInstances(getInstances(payload), element),
+    });
+    (nestedLens as any)["~setContextModelId"]?.(model["~id"]);
+
+    return nestedLens;
+  }
+
+  if (typeof element === "object" && element !== null) {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, nestedElement] of Object.entries(element)) {
+      const resolved = createElementActions(
+        nestedElement,
+        model,
+        getInstances,
+        getTargetModel,
+        getContextModelId,
+      );
+
+      if (resolved !== undefined) {
+        result[key] = resolved;
+      }
+    }
+
+    return result;
+  }
+
+  return undefined;
 }
 
 export function createModelLensApi<T extends Model<any, ModelApi>>({
   model,
   getInstances,
   getTargetModel,
+  getContextModelId,
 }: ModelApiOptions<T>): ModelLensApi<T, any> {
   const api: any = {};
 
@@ -51,38 +123,16 @@ export function createModelLensApi<T extends Model<any, ModelApi>>({
       continue;
     }
 
-    if (is.store(element) || is.event(element)) {
-      const actions: any = {
-        clock() {
-          return createClock(element as any, model, getInstances);
-        },
-      };
+    const resolved = createElementActions(
+      element,
+      model,
+      getInstances,
+      getTargetModel,
+      getContextModelId,
+    );
 
-      if (is.targetable(element)) {
-        actions.target = (map?: (payload: any) => any) =>
-          createTarget(
-            element as any,
-            model,
-            getInstances,
-            getTargetModel,
-            map,
-          );
-      }
-
-      api[key] = actions;
-      continue;
-    }
-
-    if (modelIs.model(element)) {
-      const nestedLens = lens(element);
-
-      (nestedLens as any)["~setSource"]?.({
-        source: element.$instances,
-        getSource: (payload: any) =>
-          collectNestedInstances(getInstances(payload), element),
-      });
-
-      api[key] = nestedLens;
+    if (resolved !== undefined) {
+      api[key] = resolved;
     }
   }
 

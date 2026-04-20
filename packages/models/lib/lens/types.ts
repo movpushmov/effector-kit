@@ -6,13 +6,17 @@ import type {
   StoreWritable,
 } from "effector";
 import type { Contract } from "../contracts";
-import type { ContractData, Model, ModelApiElement } from "../models";
+import type { ContractData, Model, ModelApi, ModelApiElement } from "../models";
 import type { Union, UnionMap } from "../union";
 
 export type LensPredicate = (
   instances: Record<string | number, any>,
   props: any,
 ) => Record<string | number, any>;
+
+export interface SingleResultLensMarker {
+  readonly "~single": true;
+}
 
 type WatchableUnitActions<T> = {
   clock(): Event<T>;
@@ -35,7 +39,13 @@ type ModelLensElement<Element extends ModelApiElement, Props = never> =
           ? WatchableUnitActions<Payload>
           : Element extends Model<any, any>
             ? Lens<Element, Props>
+            : Element extends ModelApi
+              ? NestedModelLensApi<Element, Props>
             : never;
+
+type NestedModelLensApi<Api extends ModelApi, Props> = {
+  [K in keyof Api]: ModelLensElement<Api[K], Props>;
+};
 
 export type LensInputModel<
   TContract extends Contract<any> = Contract<any>,
@@ -59,9 +69,13 @@ export type LensProps<InputModel extends LensInputModel | Union<UnionMap>> = {
   props<T>(): Lens<InputModel, T>;
 };
 
-type LensApi<Input extends LensInputModel, Props = never> = {
+type LensApi<
+  Input extends LensInputModel,
+  Props = never,
+  Single extends boolean = false,
+> = {
   getSource(): StoreValue<Input["$instances"]>;
-  ids(...ids: string[]): Lens<Input, Props>;
+  ids(...ids: string[]): Lens<Input, Props, Single>;
   where(
     predicate: [Props] extends [never]
       ? (data: ContractData<Input["~contract"]> & { id: string }) => boolean
@@ -69,9 +83,10 @@ type LensApi<Input extends LensInputModel, Props = never> = {
           data: ContractData<Input["~contract"]> & { id: string },
           props: Props,
         ) => boolean,
-  ): Lens<Input, Props>;
-  first(): Lens<Input, Props>;
-  last(): Lens<Input, Props>;
+  ): Lens<Input, Props, Single>;
+  first(): SingleLens<Input, Props>;
+  last(): SingleLens<Input, Props>;
+  single(): SingleLens<Input, Props>;
   delete(): EventCallable<void>;
 };
 
@@ -131,9 +146,10 @@ export type UnionLens<
   U extends Union<UnionMap>,
   Keys extends keyof U["models"] = keyof U["models"],
   Props = never,
+  Single extends boolean = false,
 > = {
-  only<K extends Keys>(...keys: K[]): UnionLens<U, K, Props>;
-  ids(...ids: string[]): UnionLens<U, Keys, Props>;
+  only<K extends Keys>(...keys: K[]): UnionLens<U, K, Props, Single>;
+  ids(...ids: string[]): UnionLens<U, Keys, Props, Single>;
   where(
     predicate: [Props] extends [never]
       ? (
@@ -152,22 +168,32 @@ export type UnionLens<
             uniqueId<K extends Keys>(variantKey: K, id: string): string;
           },
         ) => boolean,
-  ): UnionLens<U, Keys, Props>;
-  first(): UnionLens<U, Keys, Props>;
-  last(): UnionLens<U, Keys, Props>;
+  ): UnionLens<U, Keys, Props, Single>;
+  first(): SingleLens<U, Props>;
+  last(): SingleLens<U, Props>;
+  single(): SingleLens<U, Props>;
   delete(): EventCallable<void>;
   uniqueId<K extends Keys>(variantKey: K, id: string): string;
   match<Config extends UnionMatchConfig<U, Keys, Props>>(
     config: Config,
   ): EventCallable<UnionMatchPayload<Config>>;
-} & UnionVariantApi<U, Keys, Props>;
+} & UnionVariantApi<U, Keys, Props> &
+  (Single extends true ? SingleResultLensMarker : {});
+
+export type SingleLens<
+  Input extends LensInputModel | Union<UnionMap>,
+  Props = never,
+> = Lens<Input, Props, true>;
 
 export type Lens<
   Input extends LensInputModel | Union<UnionMap>,
   Props = never,
+  Single extends boolean = false,
 > =
   Input extends LensInputModel
-    ? ModelLensApi<Input, Props> & LensApi<Input, Props>
+    ? ModelLensApi<Input, Props> &
+        LensApi<Input, Props, Single> &
+        (Single extends true ? SingleResultLensMarker : {})
     : Input extends Union<UnionMap>
-      ? UnionLens<Input, keyof Input["models"], Props>
+      ? UnionLens<Input, keyof Input["models"], Props, Single>
       : never;

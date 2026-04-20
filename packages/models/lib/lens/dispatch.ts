@@ -8,7 +8,12 @@ import {
   type EventCallable,
 } from "effector";
 import type { Model } from "../models";
-import { getContext, setContext, setTarget } from "../runtime";
+import {
+  getContext,
+  modifyDeclarations,
+  setContext,
+  setTarget,
+} from "../runtime";
 
 function includesInstance(
   instances: Record<string | number, any>,
@@ -21,30 +26,37 @@ export function createClock(
   element: Event<any>,
   model: Model<any, any>,
   getInstances: (payload: any) => Record<string | number, any>,
+  getContextModelId: () => string,
 ): Event<any> {
-  const clock = createEvent<any>();
+  return modifyDeclarations(() => {
+    const clock = createEvent<any>();
 
-  sample({
-    clock: element,
-    filter: (payload) => {
-      const ctx = getContext();
+    sample({
+      clock: element,
+      filter: (payload) => {
+        const ctx = getContext();
 
-      if (!ctx.current) {
-        return false;
-      }
+        if (!ctx.current) {
+          return false;
+        }
 
-      const instances = getInstances(payload);
+        const sourceContext =
+          ctx.current.model["~id"] === getContextModelId() ? ctx : {};
+        setContext(sourceContext);
+        const instances = getInstances(payload);
+        setContext(ctx);
 
-      return (
-        ctx.current.model === model &&
-        Object.keys(instances).length > 0 &&
-        includesInstance(instances, ctx.current.instance)
-      );
-    },
-    target: clock,
-  });
+        return (
+          ctx.current.model === model &&
+          Object.keys(instances).length > 0 &&
+          includesInstance(instances, ctx.current.instance)
+        );
+      },
+      target: clock,
+    });
 
-  return clock;
+    return clock;
+  }).result;
 }
 
 export function createTarget(
@@ -52,78 +64,97 @@ export function createTarget(
   model: Model<any, any>,
   getInstances: (payload: any) => Record<string | number, any>,
   getTargetModel: () => Model<any, any>,
+  getContextModelId: () => string,
   map?: (payload: any) => any,
 ): EventCallable<any> {
-  const target = createEvent<any>();
+  return modifyDeclarations(() => {
+    const target = createEvent<any>();
 
-  const actionFx = createEffect(
-    async ({
-      payload,
-      context,
-    }: {
-      payload: any;
-      context: ReturnType<typeof getContext>;
-    }) => {
-      const baseContext = context;
-      const baseCurrent = baseContext.current;
-      setContext(baseContext);
-      const instances = getInstances(payload);
+    const actionFx = createEffect(
+      async ({
+        payload,
+        context,
+      }: {
+        payload: any;
+        context: ReturnType<typeof getContext>;
+      }) => {
+        const sourceContext =
+          context.current?.model["~id"] === getContextModelId() ? context : {};
+        setContext(sourceContext);
+        const instances = getInstances(payload);
+        const shouldResetStaleContext = Boolean(
+          context.current &&
+            context.current.model["~id"] !== getContextModelId() &&
+            Object.keys(instances).length > 0 &&
+            !includesInstance(instances, context.current.instance),
+        );
+        const baseContext = shouldResetStaleContext ? {} : context;
+        const baseCurrent = baseContext.current;
+        setContext(baseContext);
 
-      if (Object.keys(instances).length === 0) {
-        return Promise.reject();
-      }
-
-      let capturedScope: any = undefined;
-      const storeRootId = is.store(element)
-        ? (element as any).graphite.meta.rootStateRefId
-        : null;
-
-      for (const instance of Object.values(instances)) {
-        setContext({
-          current: baseCurrent
-            ? {
-                ...baseCurrent,
-                owner: baseCurrent.owner ?? baseCurrent,
-                model,
-                instance,
-              }
-            : { model, instance },
-        });
-
-        if (!baseCurrent?.target) {
-          setTarget(getTargetModel());
+        if (Object.keys(instances).length === 0) {
+          return Promise.reject();
         }
 
-        if (capturedScope && storeRootId) {
-          const stateRef = capturedScope.reg[storeRootId];
-          if (stateRef) {
-            stateRef.current = undefined;
+        let capturedScope: any = undefined;
+        const storeRootId = is.store(element)
+          ? (element as any).graphite.meta.rootStateRefId
+          : null;
+
+        for (const instance of Object.values(instances)) {
+          setContext({
+            current: baseCurrent
+              ? {
+                  ...baseCurrent,
+                  owner: baseCurrent.owner ?? baseCurrent,
+                  model,
+                  instance,
+                }
+              : { model, instance },
+          });
+
+          if (!baseCurrent?.target) {
+            setTarget(getTargetModel());
+          }
+
+          if (capturedScope && storeRootId) {
+            const stateRef = capturedScope.reg[storeRootId];
+            if (stateRef) {
+              stateRef.current = undefined;
+            }
+          }
+
+          if (baseCurrent?.scope) {
+            launch({
+              target: element,
+              params: payload,
+              scope: baseCurrent.scope,
+            });
+          } else {
+            launch({
+              target: element,
+              params: payload,
+            });
+          }
+
+          if (!capturedScope) {
+            capturedScope = getContext().current?.scope;
           }
         }
 
-        launch({
-          target: element,
-          params: payload,
-          scope: baseCurrent?.scope,
-        });
+        setContext({});
+      },
+    );
 
-        if (!capturedScope) {
-          capturedScope = getContext().current?.scope;
-        }
-      }
+    sample({
+      clock: target,
+      fn: (payload) => ({
+        payload: map ? map(payload) : payload,
+        context: getContext(),
+      }),
+      target: actionFx,
+    });
 
-      setContext(baseContext);
-    },
-  );
-
-  sample({
-    clock: target,
-    fn: (payload) => ({
-      payload: map ? map(payload) : payload,
-      context: getContext(),
-    }),
-    target: actionFx,
-  });
-
-  return target;
+    return target;
+  }).result;
 }

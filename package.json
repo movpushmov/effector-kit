@@ -10,11 +10,15 @@
     "@effector/swc-plugin": "^1.0.0",
     "@swc/core": "^1.15.18",
     "tsdown": "^0.20.1",
+    "typescript": "^6.0.3",
     "unplugin-swc": "^1.5.9",
     "vitepress": "^1.6.4",
     "vitest": "^4.0.18"
   },
   "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
     "changeset": "changeset",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

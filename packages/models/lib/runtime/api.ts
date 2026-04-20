@@ -11,36 +11,77 @@ export function getEntityId(): string {
   return `model-${entityIdCounter}`;
 }
 
+function syncScopeStoreValue(
+  $store: StoreWritable<any>,
+  value: unknown,
+  scope?: { reg?: Record<string, { current: unknown }> },
+): void {
+  if (!scope?.reg) {
+    return;
+  }
+
+  const rootId = ($store as any).graphite.meta.rootStateRefId;
+  const stateRef = ($store as any).graphite.meta.stateRef;
+
+  if (!scope.reg[rootId]) {
+    scope.reg[rootId] = Object.assign({}, stateRef, {
+      current: value,
+    });
+    return;
+  }
+
+  const scopeRef = scope.reg[rootId];
+
+  if (scopeRef) {
+    scopeRef.current = value;
+  }
+}
+
 export function modifyStore($store: StoreWritable<any>, key: string): void {
-  Object.defineProperty(($store as any).graphite.meta.stateRef, "current", {
+  const stateRef = ($store as any).graphite.meta.stateRef;
+  let fallbackValue = stateRef.current;
+  Object.defineProperty(stateRef, "~fallbackCurrent", {
+    value: fallbackValue,
+    configurable: true,
+    writable: true,
+  });
+
+  Object.defineProperty(stateRef, "current", {
     get() {
       const ctx = getContext();
 
       if (!ctx.current) {
-        return null;
+        return fallbackValue;
       }
 
       return ctx.current.instance[key];
     },
-  });
+    set(value) {
+      fallbackValue = value;
+      stateRef["~fallbackCurrent"] = value;
 
-  createAction({
-    clock: $store,
-    target: {},
-    fn: (_, value) => {
       const ctx = getContext();
 
       if (!ctx.current) {
         return;
       }
 
-      if (ctx.current.scope) {
-        // @ts-expect-error
-        ctx.current.scope.reg[$store.graphite.meta.rootStateRefId].current =
-          value;
+      ctx.current.instance[key] = value;
+      syncScopeStoreValue($store, value, ctx.current.scope as any);
+    },
+  });
+
+  createAction({
+    clock: $store,
+    target: {},
+    fn: (_: unknown, value: unknown) => {
+      const ctx = getContext();
+
+      if (!ctx.current) {
+        return;
       }
 
-      ctx.current.instance[key] = value;
+      stateRef.current = value;
     },
   });
 }
@@ -48,14 +89,28 @@ export function modifyStore($store: StoreWritable<any>, key: string): void {
 export function modifyRefsStore(
   $store: StoreWritable<any>,
   refId: string,
+  ownerModelId?: string,
 ): void {
   reserve([$store]);
-  Object.defineProperty(($store as any).graphite.meta.stateRef, "current", {
+  const stateRef = ($store as any).graphite.meta.stateRef;
+  let fallbackValue = stateRef.current;
+  Object.defineProperty(stateRef, "~fallbackCurrent", {
+    value: fallbackValue,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(stateRef, "~ownerModelId", {
+    value: ownerModelId,
+    configurable: true,
+    writable: true,
+  });
+
+  Object.defineProperty(stateRef, "current", {
     get() {
       const ctx = getContext();
 
       if (!ctx.current) {
-        return null;
+        return fallbackValue;
       }
 
       const instance: BaseInstance =
@@ -66,22 +121,14 @@ export function modifyRefsStore(
       }
       return instance["~refs"][refId] ?? [];
     },
-  });
+    set(value) {
+      fallbackValue = value;
+      stateRef["~fallbackCurrent"] = value;
 
-  createAction({
-    clock: $store,
-    target: {},
-    fn: (_, value) => {
       const ctx = getContext();
 
       if (!ctx.current) {
         return;
-      }
-
-      if (ctx.current.scope) {
-        // @ts-expect-error
-        ctx.current.scope.reg[$store.graphite.meta.rootStateRefId].current =
-          value;
       }
 
       const instance: BaseInstance =
@@ -90,7 +137,23 @@ export function modifyRefsStore(
       if (!instance["~refs"]) {
         instance["~refs"] = {};
       }
+
       instance["~refs"][refId] = value;
+      syncScopeStoreValue($store, value, ctx.current.scope as any);
+    },
+  });
+
+  createAction({
+    clock: $store,
+    target: {},
+    fn: (_: unknown, value: unknown) => {
+      const ctx = getContext();
+
+      if (!ctx.current) {
+        return;
+      }
+
+      stateRef.current = value;
     },
   });
 }
@@ -98,14 +161,28 @@ export function modifyRefsStore(
 export function modifyChildStore(
   model: Model<any, any>,
   $store: StoreWritable<any>,
+  ownerModelId?: string,
 ): void {
   reserve([$store]);
-  Object.defineProperty(($store as any).graphite.meta.stateRef, "current", {
+  const stateRef = ($store as any).graphite.meta.stateRef;
+  let fallbackValue = stateRef.current;
+  Object.defineProperty(stateRef, "~fallbackCurrent", {
+    value: fallbackValue,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(stateRef, "~ownerModelId", {
+    value: ownerModelId,
+    configurable: true,
+    writable: true,
+  });
+
+  Object.defineProperty(stateRef, "current", {
     get() {
       const ctx = getContext();
 
       if (!ctx.current) {
-        return null;
+        return fallbackValue;
       }
 
       const instance: BaseInstance =
@@ -117,22 +194,14 @@ export function modifyChildStore(
 
       return instance["~children"][model["~id"]] ?? {};
     },
-  });
+    set(value) {
+      fallbackValue = value;
+      stateRef["~fallbackCurrent"] = value;
 
-  createAction({
-    clock: $store,
-    target: {},
-    fn: (_, value) => {
       const ctx = getContext();
 
       if (!ctx.current) {
         return;
-      }
-
-      if (ctx.current.scope) {
-        // @ts-expect-error
-        ctx.current.scope.reg[$store.graphite.meta.rootStateRefId].current =
-          value;
       }
 
       const instance: BaseInstance =
@@ -143,6 +212,21 @@ export function modifyChildStore(
       }
 
       instance["~children"][model["~id"]] = value;
+      syncScopeStoreValue($store, value, ctx.current.scope as any);
+    },
+  });
+
+  createAction({
+    clock: $store,
+    target: {},
+    fn: (_: unknown, value: unknown) => {
+      const ctx = getContext();
+
+      if (!ctx.current) {
+        return;
+      }
+
+      stateRef.current = value;
     },
   });
 }
@@ -170,7 +254,14 @@ export function syncReservedStores(
   for (const $store of reservedStores) {
     const rootId = ($store as any).graphite.meta.rootStateRefId;
     const stateRef = ($store as any).graphite.meta.stateRef;
-    const currentValue = stateRef.current;
+    const ctx = getContext();
+    const ownerModelId = stateRef["~ownerModelId"];
+    const currentValue =
+      ctx.current && ownerModelId && ctx.current.model["~id"] === ownerModelId
+        ? stateRef.current
+        : stateRef["~fallbackCurrent"] !== undefined
+          ? stateRef["~fallbackCurrent"]
+          : stateRef.current;
 
     if (!scopeReg[rootId]) {
       scopeReg[rootId] = Object.assign({}, stateRef, {
@@ -179,6 +270,10 @@ export function syncReservedStores(
       continue;
     }
 
-    scopeReg[rootId].current = currentValue;
+    const scopeRef = scopeReg[rootId];
+
+    if (scopeRef) {
+      scopeRef.current = currentValue;
+    }
   }
 }

@@ -7,6 +7,7 @@ import {
   firstPredicate,
   idsPredicate,
   lastPredicate,
+  singlePredicate,
   unionWherePredicate,
   wherePredicate,
 } from "./predicates";
@@ -24,8 +25,10 @@ interface ModelLensConfig {
   model: Model<any, any>;
   source: any;
   predicates: any[];
+  singleResult: boolean;
   sourceRef: { current: ModelSourceGetter };
   getTargetModel: () => Model<any, any>;
+  getContextModelId: () => string;
 }
 
 interface UnionLensConfig {
@@ -34,6 +37,8 @@ interface UnionLensConfig {
   activeKeys: string[];
   source: any;
   predicates: any[];
+  singleResult: boolean;
+  contextModelId?: string;
   sourceRef: { current: UnionSourceGetter };
 }
 
@@ -96,6 +101,7 @@ function createModelConfig(
   sourceGetter: ModelSourceGetter = (_, source) =>
     source ?? model.$instances.getState(),
   getTargetModel: () => Model<any, any> = () => model,
+  getContextModelId: () => string = () => model["~id"],
   source: any = model.$instances,
 ): ModelLensConfig {
   return {
@@ -103,8 +109,10 @@ function createModelConfig(
     model,
     source,
     predicates: [],
+    singleResult: false,
     sourceRef: { current: sourceGetter },
     getTargetModel,
+    getContextModelId,
   };
 }
 
@@ -115,6 +123,7 @@ function createUnionConfig(input: Union<UnionMap>): UnionLensConfig {
     activeKeys: Object.keys(input.models),
     source: getUnionSource(input),
     predicates: [],
+    singleResult: false,
     sourceRef: {
       current: (activeKeys, _, source) =>
         collectUnionInstances(input.models, activeKeys, source),
@@ -125,9 +134,11 @@ function createUnionConfig(input: Union<UnionMap>): UnionLensConfig {
 function cloneModelConfig(
   config: ModelLensConfig,
   predicate?: any,
+  patch?: Partial<Pick<ModelLensConfig, "singleResult">>,
 ): ModelLensConfig {
   return {
     ...config,
+    singleResult: patch?.singleResult ?? config.singleResult,
     predicates: predicate
       ? [...config.predicates, predicate]
       : [...config.predicates],
@@ -136,12 +147,13 @@ function cloneModelConfig(
 
 function cloneUnionConfig(
   config: UnionLensConfig,
-  patch?: Partial<Pick<UnionLensConfig, "activeKeys">>,
+  patch?: Partial<Pick<UnionLensConfig, "activeKeys" | "singleResult">>,
   predicate?: any,
 ): UnionLensConfig {
   return {
     ...config,
     activeKeys: patch?.activeKeys ?? [...config.activeKeys],
+    singleResult: patch?.singleResult ?? config.singleResult,
     predicates: predicate
       ? [...config.predicates, predicate]
       : [...config.predicates],
@@ -177,21 +189,29 @@ function buildModelLens(config: ModelLensConfig): any {
       );
     },
     first() {
-      return createLensRoot(cloneModelConfig(config, firstPredicate));
+      return createLensRoot(
+        cloneModelConfig(config, firstPredicate, { singleResult: true }),
+      );
     },
     last() {
-      return createLensRoot(cloneModelConfig(config, lastPredicate));
+      return createLensRoot(
+        cloneModelConfig(config, lastPredicate, { singleResult: true }),
+      );
+    },
+    single() {
+      return createLensRoot(
+        cloneModelConfig(config, singlePredicate, { singleResult: true }),
+      );
     },
     delete() {
       const deleteEvent = createEvent<void>();
 
       sample({
         clock: deleteEvent,
-        source: config.source,
-        fn: (source) =>
+        fn: () =>
           Object.keys(
             createLensState(
-              (payload) => config.sourceRef.current(payload, source),
+              (payload) => config.sourceRef.current(payload),
               config.predicates,
             ).getSource(undefined),
           ),
@@ -203,6 +223,7 @@ function buildModelLens(config: ModelLensConfig): any {
     ...createModelLensApi({
       model: config.model,
       getTargetModel: config.getTargetModel,
+      getContextModelId: config.getContextModelId,
       getInstances: (payload) => state.getSource(payload),
     }),
   };
@@ -242,6 +263,25 @@ function buildModelLens(config: ModelLensConfig): any {
     },
   });
 
+  Object.defineProperty(lensObj, "~setContextModelId", {
+    configurable: true,
+    value: (nextModelId: string) => {
+      config.getContextModelId = () => nextModelId;
+    },
+  });
+
+  Object.defineProperty(lensObj, "~setContextModel", {
+    configurable: true,
+    value: (nextModel: Model<any, any>) => {
+      config.getContextModelId = () => nextModel["~id"];
+    },
+  });
+
+  Object.defineProperty(lensObj, "~single", {
+    configurable: true,
+    value: config.singleResult,
+  });
+
   return lensObj;
 }
 
@@ -268,10 +308,9 @@ function buildUnionDelete(config: UnionLensConfig, state: LensState) {
 
   sample({
     clock: deleteEvent,
-    source: config.source,
-    fn: (source) =>
+    fn: () =>
       createLensState(
-        (payload) => config.sourceRef.current(config.activeKeys, payload, source),
+        (payload) => config.sourceRef.current(config.activeKeys, payload),
         config.predicates,
       ).getSource(undefined),
     target: deleteFx,
@@ -303,10 +342,31 @@ function buildUnionLens(config: UnionLensConfig): any {
       return createLensRoot(cloneUnionConfig(config, { activeKeys: keys }));
     },
     first() {
-      return createLensRoot(cloneUnionConfig(config, undefined, firstPredicate));
+      return createLensRoot(
+        cloneUnionConfig(
+          config,
+          { singleResult: true },
+          firstPredicate,
+        ),
+      );
     },
     last() {
-      return createLensRoot(cloneUnionConfig(config, undefined, lastPredicate));
+      return createLensRoot(
+        cloneUnionConfig(
+          config,
+          { singleResult: true },
+          lastPredicate,
+        ),
+      );
+    },
+    single() {
+      return createLensRoot(
+        cloneUnionConfig(
+          config,
+          { singleResult: true },
+          singlePredicate,
+        ),
+      );
     },
     uniqueId(variantKey: string, id: string) {
       return `${config.input.models[variantKey]?.["~id"] ?? variantKey}:${id}`;
@@ -338,6 +398,7 @@ function buildUnionLens(config: UnionLensConfig): any {
                 model.$instances.getState() ?? {},
               ),
             () => model,
+            () => config.contextModelId ?? model["~id"],
           ),
         );
 
@@ -373,6 +434,7 @@ function buildUnionLens(config: UnionLensConfig): any {
             model.$instances.getState() ?? {},
           ),
         () => model,
+        () => config.contextModelId ?? model["~id"],
       ),
     );
   }
@@ -409,6 +471,18 @@ function buildUnionLens(config: UnionLensConfig): any {
     }) => {
       config.source = source;
       config.sourceRef.current = getSource;
+    },
+  });
+
+  Object.defineProperty(lensObj, "~single", {
+    configurable: true,
+    value: config.singleResult,
+  });
+
+  Object.defineProperty(lensObj, "~setContextModelId", {
+    configurable: true,
+    value: (nextModelId: string) => {
+      config.contextModelId = nextModelId;
     },
   });
 

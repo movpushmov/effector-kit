@@ -46,15 +46,33 @@ export function lastPredicate(
   return entry ? { [entry[0]]: entry[1] } : {};
 }
 
+export function singlePredicate(
+  instances: Record<string | number, any>,
+): Record<string | number, any> {
+  const entries = Object.entries(instances);
+
+  if (entries.length !== 1) {
+    return {};
+  }
+
+  const [entry] = entries;
+
+  return entry ? { [entry[0]]: entry[1] } : {};
+}
+
 export function idsPredicate(ids: string[]): LensPredicate {
   if (ids.length === 0) {
     return () => ({});
   }
 
   if (ids.length === 1) {
-    const [id] = ids;
+    const id = ids[0];
 
     return (instances) => {
+      if (id === undefined) {
+        return {};
+      }
+
       const instance = instances[id];
 
       return instance === undefined ? {} : { [id]: instance };

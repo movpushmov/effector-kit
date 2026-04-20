@@ -184,6 +184,10 @@ Every model has `model.lens`.
 
 Use it to target existing instances without reading `$instances` imperatively.
 
+Lens access is recursive.
+If your model API contains nested plain objects with stores, events, or nested models,
+the same shape is available through `model.lens`.
+
 ### `lens.field.target()`
 
 Dispatches to all matched instances.
@@ -204,6 +208,47 @@ Watches updates from matched instances.
 ```ts
 counterModel.lens.count.clock().watch((value) => {
   console.log(value);
+});
+```
+
+This also works for nested plain objects returned from `model(...)`.
+
+```ts
+import { createEvent, createStore, sample } from "effector";
+import { contract, define, model, type TString } from "@effector-kit/models";
+
+const settingsModel = model({
+  contract: contract({
+    title: define.store(define.schema<TString>(), ""),
+  })(),
+  fn: ({ title }) => {
+    const opened = createStore(false);
+    const toggle = createEvent<void>();
+
+    sample({
+      clock: toggle,
+      fn: (value) => !value,
+      source: opened,
+      target: opened,
+    });
+
+    return {
+      title,
+      panel: {
+        opened,
+        toggle,
+      },
+    };
+  },
+});
+
+settingsModel.lens.panel.opened.clock().watch((value) => {
+  console.log(value);
+});
+
+sample({
+  clock: createEvent<void>(),
+  target: settingsModel.lens.panel.toggle.target(),
 });
 ```
 
@@ -270,14 +315,20 @@ selection.lens
   });
 ```
 
-### `lens.first()` / `lens.last()`
+### `lens.first()` / `lens.last()` / `lens.single()`
 
 Restricts the selection to one matched instance.
 
 ```ts
 counterModel.lens.first().count.target();
 counterModel.lens.last().count.target();
+counterModel.lens.ids("a").single().count.target();
 ```
+
+`single()` is useful when your code expects one concrete instance from an
+already narrowed selection.
+React bindings use this marker so `useModel(model, lens.single())` returns
+`entity | undefined` instead of an array.
 
 ### `lens.delete()`
 
@@ -453,6 +504,7 @@ Union lenses support:
 - `where(...)`
 - `first()`
 - `last()`
+- `single()`
 - `delete()`
 - `match(...)`
 

@@ -1,18 +1,21 @@
-import type { Lens, Model } from "@effector-kit/models";
-import { useEffect, useReducer, useRef } from "react";
-import { createWatch, type Scope, type Unit } from "effector";
+import type { Lens, Model, SingleLens } from "@effector-kit/models";
+import { useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { createWatch, type Scope } from "effector";
 import { useProvidedScope } from "effector-react";
 import {
+  collectCreatedModelProxyUpdates,
   collectGraphUpdates,
   createReactModelHandle,
   getCreatedModelHandle,
   isCreatedModel,
   isLens,
+  isSingleLens,
   isReactModelHandle,
   launchManagedModel,
+  launchUnmountManagedModel,
+  resolveLensEntity,
   resolveHandleEntity,
   resolveLensEntities,
-  unmountManagedModel,
 } from "./runtime";
 import type {
   CreatedModel,
@@ -21,31 +24,74 @@ import type {
   UseModelOptions,
 } from "./types";
 
+function scheduleMicrotask(callback: () => void): void {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(callback);
+    return;
+  }
+
+  Promise.resolve().then(callback);
+}
+
 function subscribeToGraph(
   model: Model<any, any>,
   onChange: () => void,
   scope?: Scope,
 ) {
   const units = collectGraphUpdates(model);
+  const createdModelProxyUpdates = collectCreatedModelProxyUpdates(model);
 
   if (scope) {
-    return createWatch({
+    const unsubscribeGraph = createWatch({
       unit: units,
       fn: onChange,
       scope,
     });
+
+    if (createdModelProxyUpdates.length === 0) {
+      return unsubscribeGraph;
+    }
+
+    const unsubscribeCreated = createWatch({
+      unit: createdModelProxyUpdates,
+      fn: onChange,
+    });
+
+    return () => {
+      unsubscribeCreated();
+      unsubscribeGraph();
+    };
   }
 
-  return createWatch({
+  const unsubscribeGraph = createWatch({
     unit: units,
     fn: onChange,
   });
+
+  if (createdModelProxyUpdates.length === 0) {
+    return unsubscribeGraph;
+  }
+
+  const unsubscribeCreated = createWatch({
+    unit: createdModelProxyUpdates,
+    fn: onChange,
+  });
+
+  return () => {
+    unsubscribeCreated();
+    unsubscribeGraph();
+  };
 }
 
 export function useModel<T extends Model<any, any>>(
   model: T,
   options?: UseModelOptions<T>,
 ): ReactModelEntity<T>;
+export function useModel<T extends Model<any, any>>(
+  model: T,
+  lens: SingleLens<T>,
+  options?: UseModelOptions<T>,
+): ReactModelEntity<T> | undefined;
 export function useModel<T extends Model<any, any>>(
   model: T,
   lens: Lens<T>,
@@ -63,9 +109,37 @@ export function useModel<T extends Model<any, any>>(
   input: T | ReactModelHandle<T> | CreatedModel<T>,
   lensOrOptions?: Lens<T> | UseModelOptions<T>,
   maybeOptions?: UseModelOptions<T>,
-): ReactModelEntity<T> | Array<ReactModelEntity<T>> {
+): ReactModelEntity<T> | Array<ReactModelEntity<T>> | undefined {
   const [, rerender] = useReducer((value) => value + 1, 0);
   const providedScope = useProvidedScope() ?? undefined;
+  const isActiveRef = useRef(true);
+  const pendingRerenderRef = useRef(false);
+
+  useEffect(() => {
+    isActiveRef.current = true;
+
+    return () => {
+      isActiveRef.current = false;
+    };
+  }, []);
+
+  const requestRerender = () => {
+    if (pendingRerenderRef.current) {
+      return;
+    }
+
+    pendingRerenderRef.current = true;
+
+    scheduleMicrotask(() => {
+      pendingRerenderRef.current = false;
+
+      if (!isActiveRef.current) {
+        return;
+      }
+
+      rerender();
+    });
+  };
 
   if (isReactModelHandle(input)) {
     const handle = input;
@@ -74,22 +148,34 @@ export function useModel<T extends Model<any, any>>(
         ?.mounted ?? {};
     const scope = handle.scope ?? providedScope;
     const mountedRef = useRef(false);
+    const suppressGraphUpdatesRef = useRef(false);
 
     if (!mountedRef.current) {
+      suppressGraphUpdatesRef.current = true;
       launchManagedModel({ ...handle, scope }, mounted);
       mountedRef.current = true;
     }
 
-    useEffect(() => {
+    useLayoutEffect(() => {
+      suppressGraphUpdatesRef.current = false;
+    });
+
+    useLayoutEffect(() => {
       const unsubscribe = subscribeToGraph(
         handle.model,
-        () => rerender(),
+        () => {
+          if (suppressGraphUpdatesRef.current) {
+            return;
+          }
+
+          requestRerender();
+        },
         scope,
       );
 
       return () => {
         unsubscribe();
-        void unmountManagedModel({ ...handle, scope });
+        launchUnmountManagedModel({ ...handle, scope });
       };
     }, [handle, scope]);
 
@@ -103,22 +189,34 @@ export function useModel<T extends Model<any, any>>(
         ?.mounted ?? {};
     const scope = handle.scope ?? providedScope;
     const mountedRef = useRef(false);
+    const suppressGraphUpdatesRef = useRef(false);
 
     if (!mountedRef.current) {
+      suppressGraphUpdatesRef.current = true;
       launchManagedModel({ ...handle, scope }, mounted);
       mountedRef.current = true;
     }
 
-    useEffect(() => {
+    useLayoutEffect(() => {
+      suppressGraphUpdatesRef.current = false;
+    });
+
+    useLayoutEffect(() => {
       const unsubscribe = subscribeToGraph(
         handle.model,
-        () => rerender(),
+        () => {
+          if (suppressGraphUpdatesRef.current) {
+            return;
+          }
+
+          requestRerender();
+        },
         scope,
       );
 
       return () => {
         unsubscribe();
-        void unmountManagedModel({ ...handle, scope });
+        launchUnmountManagedModel({ ...handle, scope });
       };
     }, [handle, scope]);
 
@@ -129,39 +227,71 @@ export function useModel<T extends Model<any, any>>(
     const lens = lensOrOptions;
 
     useEffect(
-      () => subscribeToGraph(input, () => rerender(), providedScope),
+      () => subscribeToGraph(input, requestRerender, providedScope),
       [input, providedScope],
     );
+
+    if (isSingleLens(lens)) {
+      return resolveLensEntity(input, lens as SingleLens<T>, providedScope);
+    }
 
     return resolveLensEntities(input, lens, providedScope);
   }
 
   const options = (lensOrOptions ?? maybeOptions ?? {}) as UseModelOptions<T>;
   const handleRef = useRef<ReactModelHandle<T> | null>(null);
+  const mountedRef = useRef(false);
+  const suppressGraphUpdatesRef = useRef(false);
+  const desiredScope = options.scope ?? providedScope;
 
-  if (!handleRef.current) {
-    handleRef.current = createReactModelHandle(input, options.data, {
-      scope: options.scope ?? providedScope,
-    });
+  if (
+    !handleRef.current ||
+    (options.id !== undefined && handleRef.current.id !== options.id) ||
+    handleRef.current.scope !== desiredScope
+  ) {
+    const createOptions =
+      options.id !== undefined
+        ? desiredScope !== undefined
+          ? { id: options.id, scope: desiredScope }
+          : { id: options.id }
+        : desiredScope !== undefined
+          ? { scope: desiredScope }
+          : undefined;
+
+    handleRef.current = createReactModelHandle(input, options.data, createOptions);
+    mountedRef.current = false;
   }
 
   const handle = handleRef.current!;
   const scope = handle.scope ?? providedScope;
-  const mountedRef = useRef(false);
 
   if (!mountedRef.current) {
+    suppressGraphUpdatesRef.current = true;
     launchManagedModel({ ...handle, scope }, options.mounted ?? {});
     mountedRef.current = true;
   }
 
-  useEffect(() => {
-    const unsubscribe = subscribeToGraph(input, () => rerender(), scope);
+  useLayoutEffect(() => {
+    suppressGraphUpdatesRef.current = false;
+  });
+
+  useLayoutEffect(() => {
+    const unsubscribe = subscribeToGraph(input, () => {
+      if (suppressGraphUpdatesRef.current) {
+        return;
+      }
+
+      requestRerender();
+    }, scope);
 
     return () => {
       unsubscribe();
-      void unmountManagedModel({ ...handle, scope });
+
+      if (!options.retain) {
+        launchUnmountManagedModel({ ...handle, scope });
+      }
     };
-  }, [handle, input, scope]);
+  }, [handle, input, options.retain, scope]);
 
   return resolveHandleEntity(handle, scope)!;
 }

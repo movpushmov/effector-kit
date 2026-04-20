@@ -39,6 +39,13 @@ type Handler<Payload> = [Payload] extends [void]
   ? () => void
   : (payload: Payload) => void;
 
+type NormalizeViewKey<Key extends string> = Key extends `$${infer Rest}`
+  ? Rest
+  : Key;
+
+type ViewHandlerName<Key extends string> =
+  `on${Capitalize<NormalizeViewKey<Key>>}`;
+
 type UnitHandler<Unit> = Unit extends EventCallable<infer Payload>
   ? Handler<Payload>
   : Unit extends Event<infer Payload>
@@ -76,6 +83,7 @@ export type CreatedModelApi<Api extends ModelApi> = {
 };
 
 export interface CreatedModelMeta<T extends Model<any, any>> {
+  changed: EventCallable<void>;
   handle: ReactModelHandle<T>;
   ownedModel: T;
   ownedId: string;
@@ -110,7 +118,20 @@ type ResolvedRefValue<T extends Model<any, any> | Union<UnionMap>> =
     ? Array<ResolvedUnionEntity<T>>
     : never;
 
-type ResolvedModelValue<Element> = Element extends StoreWritable<any>
+type ResolvedNestedUnionEntity<T extends Union<UnionMap>> = {
+  [K in keyof UnionModels<T>]: ReactNestedEntity<UnionModels<T>[K]> & {
+    variant: K;
+  };
+}[keyof UnionModels<T>];
+
+type ResolvedNestedRefValue<T extends Model<any, any> | Union<UnionMap>> =
+  T extends Model<any, any>
+    ? Array<ReactNestedEntity<T>>
+    : T extends Union<UnionMap>
+    ? Array<ResolvedNestedUnionEntity<T>>
+    : never;
+
+type ReactUnitValue<Element> = Element extends StoreWritable<any>
   ? StoreValue<Element>
   : Element extends Store<any>
   ? StoreValue<Element>
@@ -123,18 +144,34 @@ type ResolvedModelValue<Element> = Element extends StoreWritable<any>
   : Element extends Ref<infer Target>
   ? ResolvedRefValue<Target>
   : Element extends ModelApi
-  ? ReactModelValue<Element>
+  ? ReactViewValue<Element>
   : never;
 
-export type ReactModelValue<Api extends ModelApi> = {
-  [K in keyof Api as K extends `$$${string}` ? never : K]: ResolvedModelValue<
-    Api[K]
-  >;
+export type ReactViewValue<Api extends ModelApi> = {
+  [K in keyof Api as K extends `$$${string}`
+    ? never
+    : Api[K] extends Event<any> | EventCallable<any> | Effect<any, any, any>
+    ? never
+    : NormalizeViewKey<string & K>]: ReactUnitValue<Api[K]>;
+} & {
+  [K in keyof Api as K extends `$$${string}`
+    ? never
+    : Api[K] extends Event<any> | EventCallable<any> | Effect<any, any, any>
+    ? ViewHandlerName<string & K>
+    : never]: UnitHandler<Api[K]>;
 };
+
+export type ReactModelValue<Api extends ModelApi> = ReactViewValue<Api>;
 
 export type ReactModelEntity<T extends Model<any, any>> = {
   id: string;
-} & ReactModelValue<T["~api"]>;
+} & ReactViewValue<T["~api"]>;
+
+export type ReactNestedValue<Api extends ModelApi> = ReactViewValue<Api>;
+
+export type ReactNestedEntity<T extends Model<any, any>> = {
+  id: string;
+} & ReactViewValue<T["~api"]>;
 
 type ComponentUnitValue<Element> = Element extends StoreWritable<any>
   ? StoreValue<Element>
@@ -162,19 +199,17 @@ type ComponentUnitValue<Element> = Element extends StoreWritable<any>
   ? ComponentViewValue<Element>
   : never;
 
-type ComponentUnitHandlerName<Key extends string> = `on${Capitalize<Key>}`;
-
 export type ComponentViewValue<Api extends ModelApi> = {
   [K in keyof Api as K extends `$$${string}`
     ? never
     : Api[K] extends Event<any> | EventCallable<any> | Effect<any, any, any>
     ? never
-    : K]: ComponentUnitValue<Api[K]>;
+    : NormalizeViewKey<string & K>]: ComponentUnitValue<Api[K]>;
 } & {
   [K in keyof Api as K extends `$$${string}`
     ? never
     : Api[K] extends Event<any> | EventCallable<any> | Effect<any, any, any>
-    ? ComponentUnitHandlerName<string & K>
+    ? ViewHandlerName<string & K>
     : never]: UnitHandler<Api[K]>;
 };
 
@@ -191,7 +226,9 @@ export interface UseModelOptions<
   Mounted extends object = {},
 > {
   data?: Partial<ContractData<T["~contract"]>>;
+  id?: string;
   mounted?: Mounted;
+  retain?: boolean;
   scope?: Scope;
 }
 

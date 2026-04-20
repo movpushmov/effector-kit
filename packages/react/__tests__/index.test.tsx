@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from "react";
+import { useEffect } from "react";
 import {
   cleanup,
   fireEvent,
@@ -11,6 +12,8 @@ import {
 import { afterEach, describe, expect, expectTypeOf, test } from "vitest";
 import {
   allSettled,
+  combine,
+  createEffect,
   createEvent,
   createStore,
   fork,
@@ -24,7 +27,9 @@ import {
   type TBoolean,
   type TNumber,
   type TRef,
+  type TStatic,
   type TString,
+  type TVoid,
 } from "@effector-kit/models";
 import { component, useModel } from "../lib";
 
@@ -33,7 +38,14 @@ afterEach(() => {
 });
 
 function renderInScope(scope: Scope, element: React.ReactElement) {
-  return render(<Provider value={scope}>{element}</Provider>);
+  const view = render(<Provider value={scope}>{element}</Provider>);
+
+  return {
+    ...view,
+    rerender(nextElement: React.ReactElement) {
+      return view.rerender(<Provider value={scope}>{nextElement}</Provider>);
+    },
+  };
 }
 
 function createCounterModel() {
@@ -214,7 +226,7 @@ describe("@effector-kit/react", () => {
         <div>
           <div data-testid="id">{entity.id}</div>
           <div data-testid="count">{String(entity.count)}</div>
-          <button onClick={() => entity.setCount(5)} type="button">
+          <button onClick={() => entity.onSetCount(5)} type="button">
             set count
           </button>
         </div>
@@ -301,6 +313,133 @@ describe("@effector-kit/react", () => {
     });
   });
 
+  test("useModel(model, single lens) returns one entity instead of an array", async () => {
+    const counterModel = createCounterModel();
+    const scope = fork();
+
+    await allSettled(counterModel.create, {
+      scope,
+      params: [
+        { id: "a", data: { count: 1 } },
+        { id: "b", data: { count: 3 } },
+      ],
+    });
+
+    function Harness() {
+      const first = useModel(
+        counterModel,
+        counterModel.lens.ids("a", "b").first(),
+      );
+      const last = useModel(
+        counterModel,
+        counterModel.lens.ids("a", "b").last(),
+      );
+      const single = useModel(
+        counterModel,
+        counterModel.lens.ids("b").single(),
+      );
+      const missing = useModel(counterModel, counterModel.lens.single());
+
+      expectTypeOf(first).toMatchTypeOf<
+        | {
+            id: string;
+            count: number;
+            onSetCount: (payload: number) => void;
+          }
+        | undefined
+      >();
+      expectTypeOf(last).toMatchTypeOf<
+        | {
+            id: string;
+            count: number;
+            onSetCount: (payload: number) => void;
+          }
+        | undefined
+      >();
+      expectTypeOf(single).toMatchTypeOf<
+        | {
+            id: string;
+            count: number;
+            onSetCount: (payload: number) => void;
+          }
+        | undefined
+      >();
+
+      return (
+        <div>
+          <div data-testid="first-count">{first?.count ?? "missing"}</div>
+          <div data-testid="last-count">{last?.count ?? "missing"}</div>
+          <div data-testid="single-count">{single?.count ?? "missing"}</div>
+          <div data-testid="missing-count">{missing?.count ?? "missing"}</div>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("first-count").textContent).toBe("1");
+      expect(screen.getByTestId("last-count").textContent).toBe("3");
+      expect(screen.getByTestId("single-count").textContent).toBe("3");
+      expect(screen.getByTestId("missing-count").textContent).toBe("missing");
+    });
+  });
+
+  test("useModel(model, {id, retain}) reuses an existing instance by id", async () => {
+    const counterModel = createCounterModel();
+    const scope = fork();
+
+    function Harness({ initial }: { initial: number }) {
+      const entity = useModel(counterModel, {
+        id: "chat-1",
+        data: { count: initial },
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="retained-id">{entity.id}</div>
+          <div data-testid="retained-count">{String(entity.count)}</div>
+          <button onClick={() => entity.onSetCount(5)} type="button">
+            set retained count
+          </button>
+        </div>
+      );
+    }
+
+    const firstView = renderInScope(scope, <Harness initial={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("retained-id").textContent).toBe("chat-1");
+      expect(screen.getByTestId("retained-count").textContent).toBe("1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set retained count" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("retained-count").textContent).toBe("5");
+    });
+
+    firstView.unmount();
+
+    await waitFor(() => {
+      expect(scope.getState(counterModel.$instances)).toMatchObject({
+        "chat-1": { count: 5 },
+      });
+    });
+
+    renderInScope(scope, <Harness initial={99} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("retained-id").textContent).toBe("chat-1");
+      expect(screen.getByTestId("retained-count").textContent).toBe("5");
+    });
+
+    expect(Object.keys(scope.getState(counterModel.$instances))).toStrictEqual([
+      "chat-1",
+    ]);
+  });
+
   test("useModel automatically resolves refs and child models", async () => {
     const { counterModel, dashboardModel } = createDashboardModel();
     const scope = fork();
@@ -324,19 +463,21 @@ describe("@effector-kit/react", () => {
           <div data-testid="item-values">
             {entity.items.map((item) => item.value).join(",") || "empty"}
           </div>
-          <button onClick={() => entity.track("c1")} type="button">
+          <button onClick={() => entity.onTrack("c1")} type="button">
             track counter
           </button>
-          <button onClick={() => entity.setSelectedCount(9)} type="button">
+          <button onClick={() => entity.onSetSelectedCount(9)} type="button">
             set selected count
           </button>
           <button
-            onClick={() => entity.createItem({ id: "i1", data: { value: 2 } })}
+            onClick={() =>
+              entity.onCreateItem({ id: "i1", data: { value: 2 } })
+            }
             type="button"
           >
             create item
           </button>
-          <button onClick={() => entity.items[0]?.setValue(7)} type="button">
+          <button onClick={() => entity.items[0]?.onSetValue(7)} type="button">
             set first item value
           </button>
         </div>
@@ -370,23 +511,25 @@ describe("@effector-kit/react", () => {
     });
   });
 
-  test("useModel keeps event names without on-prefix", async () => {
+  test("useModel normalizes root event names with on-prefix", async () => {
     const counterModel = createCounterModel();
     const scope = fork();
-    let lastEntity: ReturnType<typeof useModel<typeof counterModel>> | null =
-      null;
+    let lastEntitySnapshot: unknown = null;
 
     function Harness() {
       const entity = useModel(counterModel, {
         data: { count: 1 },
       });
 
-      lastEntity = entity;
+      lastEntitySnapshot = {
+        hasOnSetCount: typeof entity.onSetCount === "function",
+        hasSetCount: "setCount" in (entity as object),
+      };
 
       return (
         <div>
           <div data-testid="count">{entity.count}</div>
-          <button onClick={() => entity.setCount(5)} type="button">
+          <button onClick={() => entity.onSetCount(5)} type="button">
             set count
           </button>
         </div>
@@ -399,9 +542,16 @@ describe("@effector-kit/react", () => {
       expect(screen.getByTestId("count").textContent).toBe("1");
     });
 
-    expect(lastEntity).not.toBeNull();
-    expect(typeof lastEntity?.setCount).toBe("function");
-    expect("onSetCount" in (lastEntity as object)).toBe(false);
+    expect(lastEntitySnapshot).not.toBeNull();
+    if (!lastEntitySnapshot) {
+      throw new Error("counter snapshot is missing");
+    }
+    const counterSnapshot = lastEntitySnapshot as {
+      hasOnSetCount: boolean;
+      hasSetCount: boolean;
+    };
+    expect(counterSnapshot.hasOnSetCount).toBe(true);
+    expect(counterSnapshot.hasSetCount).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "set count" }));
 
@@ -410,17 +560,192 @@ describe("@effector-kit/react", () => {
     });
   });
 
+  test("useModel normalizes root store and event names", async () => {
+    const scope = fork();
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const $chatName = createStore("General");
+        const chatNameChanged = createEvent<string>();
+
+        sample({
+          clock: chatNameChanged,
+          target: $chatName,
+        });
+
+        return {
+          $chatName,
+          chatNameChanged,
+        };
+      },
+    });
+
+    let lastEntitySnapshot: unknown = null;
+
+    function Harness() {
+      const entity = useModel(screenModel);
+
+      lastEntitySnapshot = {
+        hasChatName: "chatName" in (entity as object),
+        hasRawChatName: "$chatName" in (entity as object),
+        hasRawChatNameChanged: "chatNameChanged" in (entity as object),
+        hasOnChatNameChanged: typeof entity.onChatNameChanged === "function",
+      };
+
+      expectTypeOf(entity.chatName).toEqualTypeOf<string>();
+      expectTypeOf(entity.onChatNameChanged).toMatchTypeOf<
+        (payload: string) => void
+      >();
+
+      return (
+        <div>
+          <div data-testid="root-chat-name">{entity.chatName}</div>
+          <button
+            onClick={() => entity.onChatNameChanged("Random")}
+            type="button"
+          >
+            change root chat name
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("root-chat-name").textContent).toBe("General");
+    });
+
+    expect(lastEntitySnapshot).not.toBeNull();
+    if (!lastEntitySnapshot) {
+      throw new Error("root naming snapshot is missing");
+    }
+    const rootNamingSnapshot = lastEntitySnapshot as {
+      hasChatName: boolean;
+      hasRawChatName: boolean;
+      hasRawChatNameChanged: boolean;
+      hasOnChatNameChanged: boolean;
+    };
+    expect(rootNamingSnapshot.hasChatName).toBe(true);
+    expect(rootNamingSnapshot.hasRawChatName).toBe(false);
+    expect(rootNamingSnapshot.hasRawChatNameChanged).toBe(false);
+    expect(rootNamingSnapshot.hasOnChatNameChanged).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "change root chat name" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("root-chat-name").textContent).toBe("Random");
+    });
+  });
+
+  test("useModel resolves derived stores created with combine and map", async () => {
+    const scope = fork();
+
+    const profileModel = model({
+      contract: contract({
+        firstName: define.store(define.schema<TString>(), ""),
+        lastName: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ firstName, lastName }) => {
+        const firstNameChanged = createEvent<string>();
+        const lastNameChanged = createEvent<string>();
+        const $fullName = combine(firstName, lastName, (first, last) =>
+          `${first} ${last}`.trim(),
+        );
+        const $fullNameUpper = $fullName.map((value) => value.toUpperCase());
+
+        sample({
+          clock: firstNameChanged,
+          target: firstName,
+        });
+
+        sample({
+          clock: lastNameChanged,
+          target: lastName,
+        });
+
+        return {
+          firstName,
+          lastName,
+          $fullName,
+          $fullNameUpper,
+          firstNameChanged,
+          lastNameChanged,
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(profileModel, {
+        data: {
+          firstName: "Ada",
+          lastName: "Lovelace",
+        },
+      });
+
+      expectTypeOf(entity.fullName).toEqualTypeOf<string>();
+      expectTypeOf(entity.fullNameUpper).toEqualTypeOf<string>();
+      expectTypeOf(entity.onFirstNameChanged).toMatchTypeOf<
+        (payload: string) => void
+      >();
+
+      return (
+        <div>
+          <div data-testid="full-name">{entity.fullName}</div>
+          <div data-testid="full-name-upper">{entity.fullNameUpper}</div>
+          <button
+            onClick={() => entity.onFirstNameChanged("Grace")}
+            type="button"
+          >
+            change first name
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("full-name").textContent).toBe("Ada Lovelace");
+      expect(screen.getByTestId("full-name-upper").textContent).toBe(
+        "ADA LOVELACE",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "change first name" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("full-name").textContent).toBe(
+        "Grace Lovelace",
+      );
+      expect(screen.getByTestId("full-name-upper").textContent).toBe(
+        "GRACE LOVELACE",
+      );
+    });
+  });
+
   test("useModel materializes root stores created inside model.fn", async () => {
     const chatModel = createChatModel();
     const scope = fork();
-    let lastEntity: ReturnType<typeof useModel<typeof chatModel>> | null = null;
+    let lastEntitySnapshot: unknown = null;
 
     function Harness() {
       const entity = useModel(chatModel, {
         data: { currentUserId: "u1" },
       });
 
-      lastEntity = entity;
+      lastEntitySnapshot = {
+        id: entity.id,
+        chat: entity.chat,
+        messageText: entity.messageText,
+        messages: entity.messages,
+        hasOnSetChat: typeof entity.onSetChat === "function",
+        hasOnMessageTextChanged: typeof entity.onMessageTextChanged === "function",
+        hasOnSendMessagePressed: typeof entity.onSendMessagePressed === "function",
+      };
 
       return (
         <div>
@@ -431,18 +756,18 @@ describe("@effector-kit/react", () => {
             {entity.messages.join(",") || "empty"}
           </div>
           <button
-            onClick={() => entity.setChat({ name: "General" })}
+            onClick={() => entity.onSetChat({ name: "General" })}
             type="button"
           >
             set chat
           </button>
           <button
-            onClick={() => entity.messageTextChanged("hello")}
+            onClick={() => entity.onMessageTextChanged("hello")}
             type="button"
           >
             set message text
           </button>
-          <button onClick={() => entity.sendMessagePressed()} type="button">
+          <button onClick={() => entity.onSendMessagePressed()} type="button">
             send message
           </button>
         </div>
@@ -458,13 +783,25 @@ describe("@effector-kit/react", () => {
       expect(screen.getByTestId("messages").textContent).toBe("empty");
     });
 
-    expect(lastEntity).not.toBeNull();
-    expect(lastEntity?.chat).toBeNull();
-    expect(lastEntity?.messageText).toBe("");
-    expect(lastEntity?.messages).toStrictEqual([]);
-    expect(typeof lastEntity?.setChat).toBe("function");
-    expect(typeof lastEntity?.messageTextChanged).toBe("function");
-    expect(typeof lastEntity?.sendMessagePressed).toBe("function");
+    expect(lastEntitySnapshot).not.toBeNull();
+    if (!lastEntitySnapshot) {
+      throw new Error("chat snapshot is missing");
+    }
+    const chatSnapshot = lastEntitySnapshot as {
+      id: string;
+      chat: { name: string } | null;
+      messageText: string;
+      messages: string[];
+      hasOnSetChat: boolean;
+      hasOnMessageTextChanged: boolean;
+      hasOnSendMessagePressed: boolean;
+    };
+    expect(chatSnapshot.chat).toBeNull();
+    expect(chatSnapshot.messageText).toBe("");
+    expect(chatSnapshot.messages).toStrictEqual([]);
+    expect(chatSnapshot.hasOnSetChat).toBe(true);
+    expect(chatSnapshot.hasOnMessageTextChanged).toBe(true);
+    expect(chatSnapshot.hasOnSendMessagePressed).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "set chat" }));
     fireEvent.click(screen.getByRole("button", { name: "set message text" }));
@@ -480,10 +817,22 @@ describe("@effector-kit/react", () => {
       expect(screen.getByTestId("messages").textContent).toBe("hello");
     });
 
-    expect(lastEntity?.chat).toEqual({ name: "General" });
-    expect(lastEntity?.messageText).toBe("hello");
-    expect(lastEntity?.messages).toStrictEqual(["hello"]);
-    const instanceId = lastEntity?.id;
+    if (!lastEntitySnapshot) {
+      throw new Error("chat snapshot is missing after updates");
+    }
+    const updatedChatSnapshot = lastEntitySnapshot as {
+      id: string;
+      chat: { name: string } | null;
+      messageText: string;
+      messages: string[];
+      hasOnSetChat: boolean;
+      hasOnMessageTextChanged: boolean;
+      hasOnSendMessagePressed: boolean;
+    };
+    expect(updatedChatSnapshot.chat).toEqual({ name: "General" });
+    expect(updatedChatSnapshot.messageText).toBe("hello");
+    expect(updatedChatSnapshot.messages).toStrictEqual(["hello"]);
+    const instanceId = updatedChatSnapshot.id;
     expect(instanceId).toBeTruthy();
     expect(scope.getState(chatModel.$instances)).toMatchObject({
       [instanceId!]: {
@@ -491,6 +840,681 @@ describe("@effector-kit/react", () => {
         chat: { name: "General" },
         messageText: "hello",
         messages: ["hello"],
+      },
+    });
+  });
+
+  test("useModel normalizes nested plain object naming", async () => {
+    const scope = fork();
+    const avatarPresses: string[] = [];
+
+    const screenModel = model({
+      contract: contract({
+        title: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ title }) => {
+        const $chatName = createStore("General");
+        const chatNameChanged = createEvent<string>();
+        const headerAvatarPressed = createEvent<void>();
+
+        sample({
+          clock: chatNameChanged,
+          target: $chatName,
+        });
+
+        headerAvatarPressed.watch(() => {
+          avatarPresses.push("pressed");
+        });
+
+        return {
+          title,
+          header: {
+            $chatName,
+            chatNameChanged,
+            headerAvatarPressed,
+          },
+        };
+      },
+    });
+
+    let lastEntitySnapshot: unknown = null;
+
+    function Harness() {
+      const entity = useModel(screenModel, {
+        data: { title: "Messages" },
+      });
+
+      lastEntitySnapshot = {
+        header: {
+          chatName: entity.header.chatName,
+          hasRawChatName: "$chatName" in (entity.header as object),
+          hasRawChatNameChanged: "chatNameChanged" in (entity.header as object),
+          hasOnChatNameChanged: typeof entity.header.onChatNameChanged === "function",
+          hasOnHeaderAvatarPressed:
+            typeof entity.header.onHeaderAvatarPressed === "function",
+        },
+      };
+
+      expectTypeOf(entity.header.chatName).toEqualTypeOf<string>();
+      expectTypeOf(entity.header.onChatNameChanged).toMatchTypeOf<
+        (payload: string) => void
+      >();
+      expectTypeOf(entity.header.onHeaderAvatarPressed).toMatchTypeOf<
+        () => void
+      >();
+
+      return (
+        <div>
+          <div data-testid="screen-title">{entity.title}</div>
+          <div data-testid="header-chat-name">{entity.header.chatName}</div>
+          <button
+            onClick={() => entity.header.onChatNameChanged("Random")}
+            type="button"
+          >
+            change nested chat name
+          </button>
+          <button
+            onClick={() => entity.header.onHeaderAvatarPressed()}
+            type="button"
+          >
+            press nested avatar
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("screen-title").textContent).toBe("Messages");
+      expect(screen.getByTestId("header-chat-name").textContent).toBe(
+        "General",
+      );
+    });
+
+    expect(lastEntitySnapshot).not.toBeNull();
+    if (!lastEntitySnapshot) {
+      throw new Error("nested naming snapshot is missing");
+    }
+    const nestedNamingSnapshot = lastEntitySnapshot as {
+      header: {
+        chatName: string;
+        hasRawChatName: boolean;
+        hasRawChatNameChanged: boolean;
+        hasOnChatNameChanged: boolean;
+        hasOnHeaderAvatarPressed: boolean;
+      };
+    };
+    expect(nestedNamingSnapshot.header).toMatchObject({
+      chatName: "General",
+    });
+    expect(nestedNamingSnapshot.header.hasRawChatName).toBe(false);
+    expect(nestedNamingSnapshot.header.hasRawChatNameChanged).toBe(false);
+    expect(nestedNamingSnapshot.header.hasOnChatNameChanged).toBe(true);
+    expect(nestedNamingSnapshot.header.hasOnHeaderAvatarPressed).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "change nested chat name" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("header-chat-name").textContent).toBe("Random");
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "press nested avatar" }),
+    );
+
+    expect(avatarPresses).toStrictEqual(["pressed"]);
+  });
+
+  test("useModel rerenders for derived stores inside nested factory objects", async () => {
+    const scope = fork();
+
+    function createHeaderModel() {
+      const $chat = createStore<{ name: string } | null>(null);
+      const $typingUsers = createStore<string[]>([]);
+      const chatChanged = createEvent<{ name: string } | null>();
+      const typingUsersChanged = createEvent<string[]>();
+
+      sample({
+        clock: chatChanged,
+        target: $chat,
+      });
+
+      sample({
+        clock: typingUsersChanged,
+        target: $typingUsers,
+      });
+
+      const $chatName = $chat.map((chat) => chat?.name ?? "");
+      const $chatSubtitle = combine(
+        $chat,
+        $typingUsers,
+        (chat, typingUsers) => {
+          if (!chat) {
+            return "";
+          }
+
+          return typingUsers.length > 0 ? "typing..." : chat.name;
+        },
+      );
+
+      return {
+        $chat,
+        $typingUsers,
+        $chatName,
+        $chatSubtitle,
+        chatChanged,
+        typingUsersChanged,
+      };
+    }
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const header = createHeaderModel();
+
+        return {
+          header,
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(screenModel);
+
+      return (
+        <div>
+          <div data-testid="chat-name">{entity.header.chatName || "empty"}</div>
+          <div data-testid="chat-subtitle">
+            {entity.header.chatSubtitle || "empty"}
+          </div>
+          <button
+            onClick={() => entity.header.onChatChanged({ name: "General" })}
+            type="button"
+          >
+            set chat
+          </button>
+          <button
+            onClick={() => entity.header.onTypingUsersChanged(["u1"])}
+            type="button"
+          >
+            set typing
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("empty");
+      expect(screen.getByTestId("chat-subtitle").textContent).toBe("empty");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set chat" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("General");
+      expect(screen.getByTestId("chat-subtitle").textContent).toBe("General");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set typing" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-subtitle").textContent).toBe("typing...");
+    });
+  });
+
+  test("useModel rerenders nested derived stores after mounted async flow for retained id instances", async () => {
+    const scope = fork();
+
+    function createHeaderModel() {
+      const $chat = createStore<{ name: string } | null>(null);
+      const chatChanged = createEvent<{ name: string } | null>();
+
+      sample({
+        clock: chatChanged,
+        target: $chat,
+      });
+
+      const $chatName = $chat.map((chat) => chat?.name ?? "");
+
+      return {
+        $chat,
+        $chatName,
+        chatChanged,
+      };
+    }
+
+    const getChatFx = createEffect(async (id: string) => ({ name: `Chat ${id}` }));
+
+    const screenModel = model({
+      contract: contract({
+        mounted: define.event(define.schema<TStatic<{ id: string }>>()),
+      })(),
+      fn: ({ mounted }) => {
+        const header = createHeaderModel();
+
+        sample({
+          clock: mounted,
+          fn: ({ id }) => id,
+          target: getChatFx,
+        });
+
+        sample({
+          clock: getChatFx.doneData,
+          target: header.chatChanged,
+        });
+
+        return {
+          header,
+          mounted,
+        };
+      },
+    });
+
+    function Harness({ id }: { id: string }) {
+      const entity = useModel(screenModel, {
+        id,
+        retain: true,
+      });
+
+      useEffect(() => {
+        entity.onMounted({ id });
+      }, [entity.onMounted, id]);
+
+      return <div data-testid="chat-name">{entity.header.chatName || "empty"}</div>;
+    }
+
+    const view = renderInScope(scope, <Harness id="a" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("Chat a");
+    });
+
+    view.rerender(<Harness id="b" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("Chat b");
+    });
+
+    view.rerender(<Harness id="a" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("Chat a");
+    });
+  });
+
+  test("useModel reads nested derived stores combined with external stores", async () => {
+    const $currentUser = createStore<{ id: string } | null>(null);
+    const scope = fork({
+      values: [[$currentUser, { id: "me" }]],
+    });
+
+    function createHeaderModel() {
+      const $chat = createStore<{
+        type: "PERSONAL" | "GROUP";
+        name: string;
+        members: Array<{ id: string; name: string }>;
+      } | null>(null);
+      const chatChanged = createEvent<{
+        type: "PERSONAL" | "GROUP";
+        name: string;
+        members: Array<{ id: string; name: string }>;
+      } | null>();
+
+      sample({
+        clock: chatChanged,
+        target: $chat,
+      });
+
+      const $chatName = combine($chat, $currentUser, (chat, user) => {
+        if (!chat || !user) {
+          return "";
+        }
+
+        if (chat.type === "GROUP") {
+          return chat.name;
+        }
+
+        const otherMember = chat.members.find((member) => member.id !== user.id);
+        return otherMember?.name ?? "";
+      });
+
+      return {
+        $chat,
+        $chatName,
+        chatChanged,
+      };
+    }
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const header = createHeaderModel();
+
+        return {
+          header,
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(screenModel);
+
+      return (
+        <div>
+          <div data-testid="chat-name">{entity.header.chatName || "empty"}</div>
+          <button
+            onClick={() =>
+              entity.header.onChatChanged({
+                type: "PERSONAL",
+                name: "",
+                members: [
+                  { id: "me", name: "Current User" },
+                  { id: "other", name: "Evgeny" },
+                ],
+              })}
+            type="button"
+          >
+            set personal chat
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("empty");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set personal chat" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-name").textContent).toBe("Evgeny");
+    });
+  });
+
+  test("useModel isolates nested plain-object state between different ids", async () => {
+    const scope = fork();
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const $messages = createStore<string[]>([]);
+        const messagesChanged = createEvent<string[]>();
+
+        sample({
+          clock: messagesChanged,
+          target: $messages,
+        });
+
+        return {
+          messagesList: {
+            $messages,
+            messagesChanged,
+          },
+        };
+      },
+    });
+
+    function Harness({ modelId }: { modelId: string }) {
+      const entity = useModel(screenModel, {
+        id: modelId,
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="entity-id">{entity.id}</div>
+          <div data-testid="messages">
+            {entity.messagesList.messages.join(",") || "empty"}
+          </div>
+          <button
+            onClick={() => entity.messagesList.onMessagesChanged(["hello"])}
+            type="button"
+          >
+            set messages
+          </button>
+        </div>
+      );
+    }
+
+    const view = renderInScope(scope, <Harness modelId="chat-a" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("entity-id").textContent).toBe("chat-a");
+      expect(screen.getByTestId("messages").textContent).toBe("empty");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set messages" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("messages").textContent).toBe("hello");
+    });
+
+    view.rerender(<Harness modelId="chat-b" />);
+
+    expect(screen.getByTestId("entity-id").textContent).toBe("chat-b");
+    expect(screen.getByTestId("messages").textContent).toBe("empty");
+
+    view.rerender(<Harness modelId="chat-a" />);
+
+    expect(screen.getByTestId("entity-id").textContent).toBe("chat-a");
+    expect(screen.getByTestId("messages").textContent).toBe("hello");
+  });
+
+  test("useModel preserves instance context for async nested plain-object updates", async () => {
+    const scope = fork();
+
+    const screenModel = model({
+      contract: contract({
+        mounted: define.event(define.schema<TVoid>()),
+      })(),
+      fn: ({ mounted }) => {
+        const loadMessagesFx = createEffect(async () => ["hello", "world"]);
+        const $messages = createStore<string[]>([]);
+        const messagesChanged = createEvent<string[]>();
+
+        sample({
+          clock: mounted,
+          target: loadMessagesFx,
+        });
+
+        sample({
+          clock: loadMessagesFx.doneData,
+          target: messagesChanged,
+        });
+
+        sample({
+          clock: messagesChanged,
+          target: $messages,
+        });
+
+        return {
+          mounted,
+          messagesList: {
+            $messages,
+            messagesChanged,
+          },
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+
+      useEffect(() => {
+        entity.onMounted();
+      }, [entity]);
+
+      return (
+        <div data-testid="async-messages">
+          {entity.messagesList.messages.join(",") || "empty"}
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("async-messages").textContent).toBe(
+        "hello,world",
+      );
+    });
+  });
+
+  test("useModel preserves instance context for async updates from shared effects", async () => {
+    const scope = fork();
+    const sharedGetChatFx = createEffect(async ({ id }: { id: string }) => ({
+      ok: true as const,
+      data: { id },
+    }));
+    const sharedGetMessagesFx = createEffect(
+      async ({ chatId }: { chatId: string }) => ({
+        ok: true as const,
+        data: [`message:${chatId}`],
+      }),
+    );
+
+    const screenModel = model({
+      contract: contract({
+        mounted: define.event(define.schema<TStatic<{ id: string }>>()),
+      })(),
+      fn: ({ mounted }) => {
+        const $chat = createStore<{ id: string } | null>(null);
+        const $messages = createStore<string[]>([]);
+        const chatChanged = createEvent<{ id: string } | null>();
+        const messagesChanged = createEvent<string[]>();
+
+        sample({
+          clock: chatChanged,
+          target: $chat,
+        });
+
+        sample({
+          clock: messagesChanged,
+          target: $messages,
+        });
+
+        sample({
+          clock: mounted,
+          fn: ({ id }: { id: string }) => ({ id }),
+          target: sharedGetChatFx,
+        });
+
+        sample({
+          clock: sharedGetChatFx.doneData,
+          filter: (result) => result.ok,
+          fn: (result) => result.data,
+          target: chatChanged,
+        });
+
+        sample({
+          clock: sharedGetChatFx.doneData,
+          filter: (result) => result.ok,
+          fn: (result) => ({ chatId: result.data.id }),
+          target: sharedGetMessagesFx,
+        });
+
+        sample({
+          clock: sharedGetMessagesFx.doneData,
+          source: {
+            chat: $chat,
+          },
+          filter: (source, result) => result.ok && source.chat !== null,
+          fn: (_source, result) => result.data,
+          target: messagesChanged,
+        });
+
+        return {
+          mounted,
+          messagesList: {
+            $chat,
+            $messages,
+            chatChanged,
+            messagesChanged,
+          },
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+
+      useEffect(() => {
+        entity.onMounted({ id: "chat-a" });
+      }, [entity]);
+
+      return (
+        <div data-testid="shared-async-messages">
+          {entity.messagesList.messages.join(",") || "empty"}
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("shared-async-messages").textContent).toBe(
+        "message:chat-a",
+      );
+    });
+  });
+
+  test("useModel switches top-level state synchronously when id changes", async () => {
+    const scope = fork();
+    const counterModel = createCounterModel();
+
+    function Harness({ modelId }: { modelId: string }) {
+      const entity = useModel(counterModel, {
+        id: modelId,
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="entity-id">{entity.id}</div>
+          <div data-testid="entity-count">{String(entity.count)}</div>
+          <button onClick={() => entity.onSetCount(5)} type="button">
+            change count
+          </button>
+        </div>
+      );
+    }
+
+    const view = renderInScope(scope, <Harness modelId="chat-a" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("entity-id").textContent).toBe("chat-a");
+      expect(screen.getByTestId("entity-count").textContent).toBe("0");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "change count" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("entity-count").textContent).toBe("5");
+    });
+
+    view.rerender(<Harness modelId="chat-b" />);
+
+    expect(screen.getByTestId("entity-id").textContent).toBe("chat-b");
+    expect(screen.getByTestId("entity-count").textContent).toBe("0");
+    expect(scope.getState(counterModel.$instances)).toMatchObject({
+      "chat-a": {
+        count: 5,
+      },
+      "chat-b": {
+        count: 0,
       },
     });
   });
@@ -579,7 +1603,7 @@ describe("@effector-kit/react", () => {
         return {
           title,
           panel: {
-            opened,
+            $opened: opened,
             toggle,
           },
         };
@@ -614,6 +1638,58 @@ describe("@effector-kit/react", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("nested-opened").textContent).toBe("true");
+    });
+  });
+
+  test("component view preserves root id but renames nested id events to onId", async () => {
+    const scope = fork();
+    const nestedIds: string[] = [];
+
+    const Panel = component({
+      contract: contract({
+        title: define.store(define.schema<TString>(), ""),
+      })(),
+      model: ({ title }) => {
+        const nestedId = createEvent<string>();
+
+        nestedId.watch((value) => {
+          nestedIds.push(value);
+        });
+
+        return {
+          title,
+          panel: {
+            id: nestedId,
+          },
+        };
+      },
+      view: ({ id, title, panel }) => {
+        expectTypeOf(id).toEqualTypeOf<string>();
+        expectTypeOf(panel.onId).toMatchTypeOf<(payload: string) => void>();
+
+        return (
+          <div>
+            <div data-testid="root-id">{id}</div>
+            <div data-testid="root-title">{title}</div>
+            <button onClick={() => panel.onId("nested-1")} type="button">
+              trigger nested id
+            </button>
+          </div>
+        );
+      },
+    });
+
+    renderInScope(scope, <Panel title="Panel" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("root-id").textContent).toBeTruthy();
+      expect(screen.getByTestId("root-title").textContent).toBe("Panel");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "trigger nested id" }));
+
+    await waitFor(() => {
+      expect(nestedIds).toStrictEqual(["nested-1"]);
     });
   });
 
@@ -900,14 +1976,14 @@ describe("@effector-kit/react", () => {
             aria-label="todo-title-input"
             value={todo.title}
             onChange={(event) => {
-              todo.setTitle(event.target.value);
+              todo.onSetTitle(event.target.value);
             }}
           />
           <input
             aria-label="todo-done-input"
             checked={todo.done}
             onChange={() => {
-              todo.changeDone();
+              todo.onChangeDone();
             }}
             type="checkbox"
           />
@@ -1006,14 +2082,14 @@ describe("@effector-kit/react", () => {
             aria-label={`todo-title-input-${id}`}
             value={todo.title}
             onChange={(event) => {
-              todo.setTitle(event.target.value);
+              todo.onSetTitle(event.target.value);
             }}
           />
           <input
             aria-label={`todo-done-input-${id}`}
             checked={todo.done}
             onChange={() => {
-              todo.changeDone();
+              todo.onChangeDone();
             }}
             type="checkbox"
           />
@@ -1133,10 +2209,12 @@ describe("@effector-kit/react", () => {
     const ValueComponent = createValueComponent<"hello" | "updated">();
     const controlled = ValueComponent.create({ value: "hello" }, { scope });
 
-    expectTypeOf<Parameters<typeof ValueComponent>[0]>().toMatchTypeOf<{
-      value?: "hello" | "updated";
-      model?: typeof controlled;
-    }>();
+    expectTypeOf<Parameters<typeof ValueComponent>[0]["value"]>().toEqualTypeOf<
+      "hello" | "updated" | undefined
+    >();
+    expectTypeOf<typeof controlled>().toMatchTypeOf<
+      NonNullable<Parameters<typeof ValueComponent>[0]["model"]>
+    >();
 
     renderInScope(scope, <ValueComponent model={controlled} />);
 

@@ -45,6 +45,27 @@ const counter = useModel(counterModel, {
 });
 ```
 
+If you want one stable instance per explicit id, pass `id`.
+If that instance does not exist yet, it is created.
+If it already exists, the existing instance is reused.
+
+```tsx
+function ChatScreen({ chatId }: { chatId: string }) {
+  const chat = useModel(chatModel, {
+    id: chatId,
+    data: {
+      title: "New chat",
+    },
+    retain: true,
+  });
+
+  return <div>{chat.title}</div>;
+}
+```
+
+With `retain: true`, the hook does not delete the instance on unmount.
+This is useful when model lifetime should follow app state, not React mount cycles.
+
 ## 2. `useModel(model, lens)`
 
 Returns already existing instances selected by the lens.
@@ -63,6 +84,19 @@ function PositiveCounters() {
       ))}
     </ul>
   );
+}
+```
+
+If the lens is narrowed to one instance with `first()`, `last()`, or `single()`,
+`useModel(...)` returns one resolved entity instead of an array.
+
+```tsx
+function CurrentChat({ chatId }: { chatId: string }) {
+  const chat = useModel(chatModel, chatModel.lens.ids(chatId).single());
+
+  if (!chat) return null;
+
+  return <div>{chat.title}</div>;
 }
 ```
 

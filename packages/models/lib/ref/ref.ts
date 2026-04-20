@@ -4,7 +4,11 @@ import { lens } from "../lens";
 import type { Ref } from "./types";
 import { is as modelIs } from "../is";
 import type { Union, UnionMap } from "../union";
-import { getEntityId, modifyRefsStore } from "../runtime";
+import {
+  getDeclarationModelId,
+  getEntityId,
+  modifyRefsStore,
+} from "../runtime";
 
 type RefItem = { key: string; id: string };
 
@@ -79,8 +83,7 @@ function setUnionRefSource(
           continue;
         }
 
-        const instances =
-          source?.models?.[key] ?? input.models[key].$instances.getState() ?? {};
+        const instances = source?.models?.[key] ?? model.$instances.getState() ?? {};
 
         if (!instances[id]) {
           continue;
@@ -103,13 +106,18 @@ export function ref<T extends Model<any, any>>(model: T): Ref<T>;
 export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
   const refId = getEntityId();
   const patchedLens = lens(input as any);
+  const declarationModelId = getDeclarationModelId();
+
+  if (declarationModelId) {
+    (patchedLens as any)["~setContextModelId"]?.(declarationModelId);
+  }
 
   if (modelIs.union(input)) {
     const $ids = createStore<RefItem[]>([], {
       serialize: "ignore",
     });
 
-    modifyRefsStore($ids as any, refId);
+    modifyRefsStore($ids as any, refId, declarationModelId);
     setUnionRefSource(patchedLens, input, $ids);
 
     const add: Record<string, any> = {};
@@ -151,7 +159,7 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
   const modelInput = input as Model<any, any>;
 
   const $ids = createStore<string[]>([]);
-  modifyRefsStore($ids, refId);
+  modifyRefsStore($ids, refId, declarationModelId);
   setModelRefSource(patchedLens, modelInput, $ids);
 
   const add = createEvent<string>();
