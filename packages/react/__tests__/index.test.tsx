@@ -440,6 +440,56 @@ describe("@effector-kit/react", () => {
     ]);
   });
 
+  test("useModel resolves retained ids through model aliases", async () => {
+    const counterModel = createCounterModel();
+    const scope = fork();
+
+    await allSettled(counterModel.create, {
+      scope,
+      params: { id: "chat-1", data: { count: 1 } },
+    });
+
+    await allSettled(counterModel.addAlias, {
+      scope,
+      params: { aliasId: "chat-alias", instanceId: "chat-1" },
+    });
+
+    function Harness() {
+      const entity = useModel(counterModel, {
+        id: "chat-alias",
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="alias-id">{entity.id}</div>
+          <div data-testid="alias-count">{String(entity.count)}</div>
+          <button onClick={() => entity.onSetCount(7)} type="button">
+            set alias count
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("alias-id").textContent).toBe("chat-alias");
+      expect(screen.getByTestId("alias-count").textContent).toBe("1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set alias count" }));
+
+    await waitFor(() => {
+      expect(scope.getState(counterModel.$instances)).toStrictEqual({
+        "chat-1": { count: 7 },
+      });
+      expect(scope.getState(counterModel.$aliases)).toStrictEqual({
+        "chat-alias": "chat-1",
+      });
+    });
+  });
+
   test("useModel automatically resolves refs and child models", async () => {
     const { counterModel, dashboardModel } = createDashboardModel();
     const scope = fork();
@@ -1519,6 +1569,301 @@ describe("@effector-kit/react", () => {
     });
   });
 
+  test("useModel isolates render-time event updates between retained ids in one render", async () => {
+    const scope = fork();
+
+    const screenModel = model({
+      contract: contract({
+        value: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ value }) => {
+        const valueChanged = createEvent<string>();
+
+        sample({
+          clock: valueChanged,
+          target: value,
+        });
+
+        return {
+          value,
+          valueChanged,
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+
+      if (first.value === "") {
+        first.onValueChanged("filled-a");
+      }
+
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="first-id">{first.id}</div>
+          <div data-testid="first-value">{first.value || "empty"}</div>
+          <div data-testid="second-id">{second.id}</div>
+          <div data-testid="second-value">{second.value || "empty"}</div>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": { value: "filled-a" },
+        "chat-b": { value: "" },
+      });
+    });
+
+    expect(screen.getByTestId("first-id").textContent).toBe("chat-a");
+    expect(screen.getByTestId("second-id").textContent).toBe("chat-b");
+    expect(screen.getByTestId("second-value").textContent).toBe("empty");
+  });
+
+  test("useModel keeps render-time event updates on the correct retained id after rerender", async () => {
+    const scope = fork();
+
+    const screenModel = model({
+      contract: contract({
+        value: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ value }) => {
+        const valueChanged = createEvent<string>();
+
+        sample({
+          clock: valueChanged,
+          target: value,
+        });
+
+        return {
+          value,
+          valueChanged,
+        };
+      },
+    });
+
+    function Harness({ modelId }: { modelId: string }) {
+      const entity = useModel(screenModel, {
+        id: modelId,
+        retain: true,
+      });
+
+      if (entity.value === "") {
+        entity.onValueChanged(`filled-${modelId}`);
+      }
+
+      return (
+        <div>
+          <div data-testid="entity-id">{entity.id}</div>
+          <div data-testid="entity-value">{entity.value || "empty"}</div>
+        </div>
+      );
+    }
+
+    const view = renderInScope(scope, <Harness modelId="chat-a" />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": { value: "filled-chat-a" },
+      });
+    });
+
+    view.rerender(<Harness modelId="chat-b" />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": { value: "filled-chat-a" },
+        "chat-b": { value: "filled-chat-b" },
+      });
+    });
+
+    expect(screen.getByTestId("entity-id").textContent).toBe("chat-b");
+  });
+
+  test("useModel isolates render-time nested array updates between retained ids", async () => {
+    const scope = fork();
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const $messages = createStore<string[]>([]);
+        const messagesChanged = createEvent<string[]>();
+
+        sample({
+          clock: messagesChanged,
+          target: $messages,
+        });
+
+        return {
+          messagesList: {
+            $messages,
+            messagesChanged,
+          },
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+
+      if (first.messagesList.messages.length === 0) {
+        first.messagesList.onMessagesChanged(["filled-a"]);
+      }
+
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      if (second.messagesList.messages.length === 0) {
+        second.messagesList.onMessagesChanged(["filled-b"]);
+      }
+
+      return (
+        <div>
+          <div data-testid="first-array">
+            {first.messagesList.messages.join(",") || "empty"}
+          </div>
+          <div data-testid="second-array">
+            {second.messagesList.messages.join(",") || "empty"}
+          </div>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$messages": ["filled-a"],
+        },
+        "chat-b": {
+          "messagesList.$messages": ["filled-b"],
+        },
+      });
+    });
+
+    expect(screen.getByTestId("first-array").textContent).toBe("empty");
+    expect(screen.getByTestId("second-array").textContent).toBe("empty");
+  });
+
+  test("useModel does not leak raw instance fields between different models with the same retained id", async () => {
+    const scope = fork();
+
+    const firstModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const store = createStore("");
+        const storeChanged = createEvent<string>();
+
+        sample({
+          clock: storeChanged,
+          target: store,
+        });
+
+        return {
+          nested: {
+            store,
+            storeChanged,
+          },
+        };
+      },
+    });
+
+    const secondModel = model({
+      contract: contract({
+        value: define.store(define.schema<TString>(), ""),
+      })(),
+      fn: ({ value }) => {
+        const valueChanged = createEvent<string>();
+
+        sample({
+          clock: valueChanged,
+          target: value,
+        });
+
+        return {
+          value,
+          valueChanged,
+        };
+      },
+    });
+
+    function FirstHarness() {
+      const entity = useModel(firstModel, {
+        id: "shared-id",
+        retain: true,
+      });
+
+      return (
+        <button
+          onClick={() => entity.nested.onStoreChanged("first")}
+          type="button"
+        >
+          fill first
+        </button>
+      );
+    }
+
+    function SecondHarness() {
+      const entity = useModel(secondModel, {
+        id: "shared-id",
+        retain: true,
+      });
+
+      return (
+        <button onClick={() => entity.onValueChanged("second")} type="button">
+          fill second
+        </button>
+      );
+    }
+
+    renderInScope(
+      scope,
+      <>
+        <FirstHarness />
+        <SecondHarness />
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "fill first" }));
+    fireEvent.click(screen.getByRole("button", { name: "fill second" }));
+
+    await waitFor(() => {
+      expect(scope.getState(firstModel.$instances)).toMatchObject({
+        "shared-id": {
+          "nested.store": "first",
+        },
+      });
+      expect(scope.getState(secondModel.$instances)).toMatchObject({
+        "shared-id": {
+          value: "second",
+        },
+      });
+    });
+
+    expect(scope.getState(firstModel.$instances)["shared-id"]).not.toHaveProperty(
+      "value",
+    );
+    expect(
+      scope.getState(secondModel.$instances)["shared-id"],
+    ).not.toHaveProperty("nested.store");
+  });
+
   test("component maps stores to values and events to on-prefixed handlers", async () => {
     const lifecycle: string[] = [];
     const scope = fork();
@@ -1639,6 +1984,1782 @@ describe("@effector-kit/react", () => {
     await waitFor(() => {
       expect(screen.getByTestId("nested-opened").textContent).toBe("true");
     });
+  });
+
+  test("useModel keeps shared effect params on the correct retained id", async () => {
+    const scope = fork();
+    const sent: Array<{ chatId: string; text: string }> = [];
+    const sharedSendFx = createEffect(
+      async (params: { chatId: string; text: string }) => {
+        sent.push(params);
+        return params;
+      },
+    );
+
+    const screenModel = model({
+      contract: contract({
+        mounted: define.event(
+          define.schema<TStatic<{ chatId: string }>>(),
+        ),
+      })(),
+      fn: ({ mounted }) => {
+        const $chatId = createStore("");
+        const $messageText = createStore("");
+
+        const chatIdChanged = createEvent<string>();
+        const messageTextChanged = createEvent<string>();
+        const sendMessagePressed = createEvent<void>();
+
+        sample({
+          clock: mounted,
+          fn: ({ chatId }) => chatId,
+          target: chatIdChanged,
+        });
+
+        sample({
+          clock: chatIdChanged,
+          target: $chatId,
+        });
+
+        sample({
+          clock: messageTextChanged,
+          target: $messageText,
+        });
+
+        sample({
+          clock: sendMessagePressed,
+          source: {
+            chatId: $chatId,
+            text: $messageText,
+          },
+          filter: ({ text }) => text.length > 0,
+          target: sharedSendFx,
+        });
+
+        return {
+          mounted,
+          $chatId,
+          $messageText,
+          chatIdChanged,
+          messageTextChanged,
+          sendMessagePressed,
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      useEffect(() => {
+        first.onMounted({ chatId: "chat-a" });
+        second.onMounted({ chatId: "chat-b" });
+      }, [first, second]);
+
+      return (
+        <div>
+          <button onClick={() => first.onMessageTextChanged("from-a")} type="button">
+            fill a
+          </button>
+          <button onClick={() => second.onMessageTextChanged("from-b")} type="button">
+            fill b
+          </button>
+          <button onClick={() => second.onSendMessagePressed()} type="button">
+            send b
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "$chatId": "chat-a",
+          "$messageText": "",
+        },
+        "chat-b": {
+          "$chatId": "chat-b",
+          "$messageText": "",
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill a" }));
+    fireEvent.click(screen.getByRole("button", { name: "fill b" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([{ chatId: "chat-b", text: "from-b" }]);
+    });
+  });
+
+  test("useModel keeps nested source stores on the correct retained id", async () => {
+    const scope = fork();
+    const sent: Array<{ chatId: string; text: string }> = [];
+    const sendFx = createEffect(async (params: { chatId: string; text: string }) => {
+      sent.push(params);
+      return params;
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const header = {
+          $chatId: createStore(""),
+          chatChanged: createEvent<string>(),
+        };
+        const messagesList = {
+          $chatId: createStore<string | null>(null),
+          chatChanged: createEvent<string | null>(),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+          sendMessagePressed: createEvent<void>(),
+        };
+
+        sample({
+          clock: header.chatChanged,
+          target: header.$chatId,
+        });
+
+        sample({
+          clock: messagesList.chatChanged,
+          target: messagesList.$chatId,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chatId: messagesList.$chatId,
+            text: bottomBar.$messageText,
+          },
+          filter: ({ chatId, text }) => Boolean(chatId) && text.length > 0,
+          fn: ({ chatId, text }) => ({ chatId: chatId!, text }),
+          target: sendFx,
+        });
+
+        return {
+          header,
+          messagesList,
+          bottomBar,
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      useEffect(() => {
+        first.header.onChatChanged("chat-a");
+        first.messagesList.onChatChanged("chat-a");
+        second.header.onChatChanged("chat-b");
+      }, [first, second]);
+
+      return (
+        <div>
+          <button onClick={() => second.messagesList.onChatChanged("chat-b")} type="button">
+            link b
+          </button>
+          <button onClick={() => second.bottomBar.onMessageTextChanged("from-b")} type="button">
+            fill b
+          </button>
+          <button onClick={() => second.bottomBar.onSendMessagePressed()} type="button">
+            send b
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "header.$chatId": "chat-a",
+          "messagesList.$chatId": "chat-a",
+        },
+        "chat-b": {
+          "header.$chatId": "chat-b",
+          "messagesList.$chatId": null,
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "link b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([{ chatId: "chat-b", text: "from-b" }]);
+    });
+  });
+
+  test("useModel keeps nested derived source stores on the correct retained id", async () => {
+    const scope = fork();
+    const sent: Array<{ chatId: string; text: string }> = [];
+    const sendFx = createEffect(async (params: { chatId: string; text: string }) => {
+      sent.push(params);
+      return params;
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const $chat = createStore<{ id: string } | null>(null);
+        const $chatId = $chat.map((chat) => chat?.id ?? "");
+
+        const messagesList = {
+          $chat,
+          $chatId,
+          chatChanged: createEvent<{ id: string } | null>(),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+          sendMessagePressed: createEvent<void>(),
+        };
+
+        sample({
+          clock: messagesList.chatChanged,
+          target: messagesList.$chat,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chatId: messagesList.$chatId,
+            text: bottomBar.$messageText,
+          },
+          filter: ({ chatId, text }) => chatId.length > 0 && text.length > 0,
+          target: sendFx,
+        });
+
+        return {
+          messagesList,
+          bottomBar,
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      useEffect(() => {
+        first.messagesList.onChatChanged({ id: "chat-a" });
+      }, [first]);
+
+      return (
+        <div>
+          <button onClick={() => second.bottomBar.onMessageTextChanged("from-b")} type="button">
+            fill b
+          </button>
+          <button onClick={() => second.bottomBar.onSendMessagePressed()} type="button">
+            send b
+          </button>
+          <button onClick={() => second.messagesList.onChatChanged({ id: "chat-b" })} type="button">
+            link b
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$chat": { id: "chat-a" },
+        },
+        "chat-b": {
+          "messagesList.$chat": null,
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "link b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([{ chatId: "chat-b", text: "from-b" }]);
+    });
+  });
+
+  test("useModel keeps nested object source stores on the correct retained id", async () => {
+    const scope = fork();
+    const sent: Array<{ chatId: string; text: string }> = [];
+    const sendFx = createEffect(async (params: { chatId: string; text: string }) => {
+      sent.push(params);
+      return params;
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const messagesList = {
+          $chat: createStore<{ id: string } | null>(null),
+          chatChanged: createEvent<{ id: string } | null>(),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+          sendMessagePressed: createEvent<void>(),
+        };
+
+        sample({
+          clock: messagesList.chatChanged,
+          target: messagesList.$chat,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            text: bottomBar.$messageText,
+          },
+          filter: ({ chat, text }) => Boolean(chat) && text.length > 0,
+          fn: ({ chat, text }) => ({ chatId: chat!.id, text }),
+          target: sendFx,
+        });
+
+        return {
+          messagesList,
+          bottomBar,
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      useEffect(() => {
+        first.messagesList.onChatChanged({ id: "chat-a" });
+      }, [first]);
+
+      return (
+        <div>
+          <button onClick={() => second.bottomBar.onMessageTextChanged("from-b")} type="button">
+            fill b
+          </button>
+          <button onClick={() => second.bottomBar.onSendMessagePressed()} type="button">
+            send b
+          </button>
+          <button onClick={() => second.messagesList.onChatChanged({ id: "chat-b" })} type="button">
+            link b
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$chat": { id: "chat-a" },
+        },
+        "chat-b": {
+          "messagesList.$chat": null,
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "link b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([{ chatId: "chat-b", text: "from-b" }]);
+    });
+  });
+
+  test("useModel keeps mixed derived source stores on the correct retained id", async () => {
+    const scope = fork();
+    const sent: Array<{ chatId: string; text: string }> = [];
+    const sendFx = createEffect(async (params: { chatId: string; text: string }) => {
+      sent.push(params);
+      return params;
+    });
+    const $chats = createStore<Record<string, { id: string }>>({
+      "chat-a": { id: "chat-a" },
+      "chat-b": { id: "chat-b" },
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const messagesList = {
+          $chatId: createStore<string | null>(null),
+          chatChanged: createEvent<string | null>(),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+          sendMessagePressed: createEvent<void>(),
+        };
+        const $chat = combine(messagesList.$chatId, $chats, (chatId, chats) =>
+          chatId ? chats[chatId] ?? null : null,
+        );
+
+        sample({
+          clock: messagesList.chatChanged,
+          target: messagesList.$chatId,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: $chat,
+            text: bottomBar.$messageText,
+          },
+          filter: ({ chat, text }) => Boolean(chat) && text.length > 0,
+          fn: ({ chat, text }) => ({ chatId: chat!.id, text }),
+          target: sendFx,
+        });
+
+        return {
+          messagesList: {
+            ...messagesList,
+            $chat,
+          },
+          bottomBar,
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      useEffect(() => {
+        first.messagesList.onChatChanged("chat-a");
+      }, [first]);
+
+      return (
+        <div>
+          <button onClick={() => second.bottomBar.onMessageTextChanged("from-b")} type="button">
+            fill b
+          </button>
+          <button onClick={() => second.bottomBar.onSendMessagePressed()} type="button">
+            send b
+          </button>
+          <button onClick={() => second.messagesList.onChatChanged("chat-b")} type="button">
+            link b
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$chatId": "chat-a",
+        },
+        "chat-b": {
+          "messagesList.$chatId": null,
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "link b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send b" }));
+
+    await waitFor(() => {
+      expect(sent).toEqual([{ chatId: "chat-b", text: "from-b" }]);
+    });
+  });
+
+  test("useModel does not send to the previous chat from a mounted draft route", async () => {
+    const scope = fork();
+    const sent: Array<{ chatId: string; text: string }> = [];
+    const createdDirectChats: Array<{ peerId: string; content: string }> = [];
+    const pressedIds: string[] = [];
+    const createDirectSourceReads: Array<{
+      chat: { id: string } | null;
+      text: string;
+      info: MountedInfo;
+    }> = [];
+    const sendSourceReads: Array<{
+      chat: { id: string } | null;
+      text: string;
+      editingMessage: { id: string } | null;
+    }> = [];
+    const sendFx = createEffect(async (params: { chatId: string; text: string }) => {
+      sent.push(params);
+      return params;
+    });
+    const createDirectChatFx = createEffect(
+      async (params: { peerId: string; content: string }) => {
+        createdDirectChats.push(params);
+        return params;
+      },
+    );
+    const pressedFx = createEffect(async (id: string) => {
+      pressedIds.push(id);
+      return id;
+    });
+    const createDirectSourceFx = createEffect(
+      async (params: {
+        chat: { id: string } | null;
+        text: string;
+        info: MountedInfo;
+      }) => {
+        createDirectSourceReads.push(params);
+        return params;
+      },
+    );
+    const sendSourceFx = createEffect(
+      async (params: {
+        chat: { id: string } | null;
+        text: string;
+        editingMessage: { id: string } | null;
+      }) => {
+        sendSourceReads.push(params);
+        return params;
+      },
+    );
+
+    type MountedInfo = {
+      id: string;
+      draft?: boolean;
+      kind?: "chat" | "user";
+      name?: string;
+    };
+
+    const screenModel = model({
+      contract: contract({
+        mounted: define.event(define.schema<TStatic<MountedInfo>>()),
+      })(),
+      fn: ({ mounted }) => {
+        const $chatInfo = createStore<MountedInfo>({ id: "" }).on(
+          mounted,
+          (_, info) => info,
+        );
+        const header = {
+          $chat: createStore<{ id: string; name?: string } | null>(null),
+          chatChanged: createEvent<{ id: string; name?: string } | null>(),
+        };
+        const messagesList = {
+          $chat: createStore<{ id: string } | null>(null),
+          chatChanged: createEvent<{ id: string } | null>(),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          $editingMessage: createStore<{ id: string } | null>(null),
+          messageTextChanged: createEvent<string>(),
+          sendMessagePressed: createEvent<void>(),
+        };
+
+        sample({
+          clock: header.chatChanged,
+          target: header.$chat,
+        });
+
+        sample({
+          clock: messagesList.chatChanged,
+          target: messagesList.$chat,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: mounted,
+          filter: (info) => info.draft === true || info.kind === "user",
+          fn: (info) => ({
+            id: info.id,
+            ...(info.name === undefined ? {} : { name: info.name }),
+          }),
+          target: header.chatChanged,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: $chatInfo,
+          fn: (info) => info.id,
+          target: pressedFx,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            text: bottomBar.$messageText,
+            info: $chatInfo,
+          },
+          target: createDirectSourceFx,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            text: bottomBar.$messageText,
+            info: $chatInfo,
+          },
+          filter: ({ chat, text, info }) =>
+            !chat?.id &&
+            text.trim().length > 0 &&
+            (info.draft === true || info.kind === "user"),
+          fn: ({ text, info }) => ({
+            peerId: info.id,
+            content: text.trim(),
+          }),
+          target: createDirectChatFx,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            editingMessage: bottomBar.$editingMessage,
+            text: bottomBar.$messageText,
+          },
+          target: sendSourceFx,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            editingMessage: bottomBar.$editingMessage,
+            text: bottomBar.$messageText,
+          },
+          filter: ({ chat, text }) => Boolean(chat?.id) && text.trim().length > 0,
+          fn: ({ chat, text }) => ({ chatId: chat!.id, text: text.trim() }),
+          target: sendFx,
+        });
+
+        return {
+          header,
+          messagesList,
+          bottomBar,
+          mounted,
+        };
+      },
+    });
+
+    function Screen({ route }: { route: MountedInfo }) {
+      const entity = useModel(screenModel, {
+        id: route.id,
+        retain: true,
+      });
+
+      useEffect(() => {
+        entity.onMounted(route);
+
+        if (!route.draft) {
+          entity.messagesList.onChatChanged({ id: route.id });
+        }
+      }, [entity, route]);
+
+      return (
+        <div>
+          <div data-testid="entity-id">{entity.id}</div>
+          <div data-testid="header-chat-id">{entity.header.chat?.id || "empty"}</div>
+          <div data-testid="messages-chat-id">{entity.messagesList.chat?.id || "empty"}</div>
+          <button
+            onClick={() => entity.bottomBar.onMessageTextChanged("hello")}
+            type="button"
+          >
+            fill current
+          </button>
+          <button onClick={() => entity.bottomBar.onSendMessagePressed()} type="button">
+            send current
+          </button>
+        </div>
+      );
+    }
+
+    function Harness() {
+      return (
+        <div>
+          <Screen route={{ id: "chat-a", kind: "chat" }} />
+          <Screen
+            route={{
+              id: "user-b",
+              kind: "user",
+              draft: true,
+              name: "User B",
+            }}
+          />
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$chat": { id: "chat-a" },
+        },
+        "user-b": {
+          "messagesList.$chat": null,
+        },
+      });
+    });
+
+    const buttons = screen.getAllByRole("button", { name: "fill current" });
+    fireEvent.click(buttons[1]!);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "user-b": {
+          "bottomBar.$messageText": "hello",
+        },
+      });
+    });
+
+    const sendButtons = screen.getAllByRole("button", { name: "send current" });
+    fireEvent.click(sendButtons[1]!);
+
+    await waitFor(() => {
+      expect(pressedIds).toEqual(["user-b"]);
+      expect(createDirectSourceReads).toEqual([
+        {
+          chat: null,
+          text: "hello",
+          info: {
+            draft: true,
+            id: "user-b",
+            kind: "user",
+            name: "User B",
+          },
+        },
+      ]);
+      expect(sendSourceReads).toEqual([
+        {
+          chat: null,
+          text: "hello",
+          editingMessage: null,
+        },
+      ]);
+      expect(sent).toEqual([]);
+      expect(createdDirectChats).toEqual([
+        { peerId: "user-b", content: "hello" },
+      ]);
+    });
+  });
+
+  test("useModel keeps async loaded createAction sources isolated for draft first-message flow", async () => {
+    const { createAction } = await import(
+      "../../models/node_modules/effector-action"
+    );
+
+    const scope = fork();
+    const sendCalls: Array<{ chatId: string; content: string }> = [];
+    const createDirectCalls: Array<{ id: string; content: string }> = [];
+
+    type MountedInfo = {
+      id: string;
+      draft?: boolean;
+      kind?: "chat" | "user";
+      name?: string;
+    };
+
+    const loadChatFx = createEffect(async ({ id }: { id: string }) => ({
+      id,
+      name: "Loaded chat",
+    }));
+    const sendFx = createEffect(
+      async (params: { chatId: string; content: string }) => {
+        sendCalls.push(params);
+        return params;
+      },
+    );
+    const createDirectFx = createEffect(
+      async (params: { id: string; content: string }) => {
+        createDirectCalls.push(params);
+        return {
+          chat: {
+            id: `direct-${params.id}`,
+            createdAt: "2026-04-25T00:00:00.000Z",
+          },
+          message: {
+            id: "message-1",
+            chatId: `direct-${params.id}`,
+            content: params.content,
+          },
+        };
+      },
+    );
+
+    function createHeader() {
+      const $chat = createStore<{ id: string; name?: string } | null>(null);
+      const chatChanged = createEvent<{ id: string; name?: string } | null>();
+
+      sample({
+        clock: chatChanged,
+        target: $chat,
+      });
+
+      return {
+        $chat,
+        chatChanged,
+      };
+    }
+
+    function createMessagesList() {
+      const $chat = createStore<{ id: string; name?: string } | null>(null);
+      const $messages = createStore<Array<{ id: string; text: string }>>([]);
+      const chatChanged = createEvent<{ id: string; name?: string } | null>();
+      const messagesChanged = createEvent<Array<{ id: string; text: string }>>();
+
+      sample({
+        clock: chatChanged,
+        target: $chat,
+      });
+
+      sample({
+        clock: messagesChanged,
+        target: $messages,
+      });
+
+      return {
+        $chat,
+        $messages,
+        chatChanged,
+        messagesChanged,
+      };
+    }
+
+    function createBottomBar() {
+      const $messageText = createStore("");
+      const $editingMessage = createStore<{ id: string } | null>(null);
+      const messageTextChanged = createEvent<string>();
+      const sendMessagePressed = createEvent<void>();
+
+      sample({
+        clock: messageTextChanged,
+        target: $messageText,
+      });
+
+      return {
+        $messageText,
+        $editingMessage,
+        messageTextChanged,
+        sendMessagePressed,
+      };
+    }
+
+    const screenModel = model({
+      contract: contract({
+        mounted: define.event(define.schema<TStatic<MountedInfo>>()),
+      })(),
+      fn: ({ mounted }) => {
+        const header = createHeader();
+        const messagesList = createMessagesList();
+        const bottomBar = createBottomBar();
+        const $chatInfo = createStore<MountedInfo>({ id: "" }).on(
+          mounted,
+          (_, info) => info,
+        );
+        const $pendingDirectSend = createStore(false);
+        const $lastSentContent = createStore("");
+
+        sample({
+          clock: mounted,
+          filter: (info) => info.draft !== true && info.kind !== "user",
+          fn: ({ id }) => ({ id }),
+          target: loadChatFx,
+        });
+
+        sample({
+          clock: mounted,
+          filter: (info) => info.draft === true || info.kind === "user",
+          fn: (info) => ({
+            id: info.id,
+            ...(info.name === undefined ? {} : { name: info.name }),
+          }),
+          target: header.chatChanged,
+        });
+
+        createAction({
+          clock: loadChatFx.doneData,
+          target: {
+            chatChanged: messagesList.chatChanged,
+            headerChatChanged: header.chatChanged,
+          },
+          fn: (target, chat) => {
+            target.chatChanged(chat);
+            target.headerChatChanged(chat);
+          },
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            text: bottomBar.$messageText,
+            chatInfo: $chatInfo,
+          },
+          filter: ({ chat, text, chatInfo }) =>
+            !chat?.id &&
+            text.trim().length > 0 &&
+            (chatInfo.draft === true || chatInfo.kind === "user"),
+          fn: () => true,
+          target: $pendingDirectSend,
+        });
+
+        sample({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            text: bottomBar.$messageText,
+            chatInfo: $chatInfo,
+          },
+          filter: ({ chat, text, chatInfo }) =>
+            !chat?.id &&
+            text.trim().length > 0 &&
+            (chatInfo.draft === true || chatInfo.kind === "user"),
+          fn: ({ chatInfo, text }) => ({
+            id: chatInfo.id,
+            content: text.trim(),
+          }),
+          target: createDirectFx,
+        });
+
+        createAction({
+          clock: bottomBar.sendMessagePressed,
+          source: {
+            chat: messagesList.$chat,
+            editingMessage: bottomBar.$editingMessage,
+            text: bottomBar.$messageText,
+          },
+          target: {
+            $pendingDirectSend,
+            $lastSentContent,
+            clearMessageText: bottomBar.messageTextChanged,
+            sendFx,
+          },
+          fn: (target, { chat, editingMessage, text }) => {
+            const content = text.trim();
+
+            if (!chat?.id || content.length === 0) {
+              return;
+            }
+
+            target.$pendingDirectSend(false);
+
+            if (!editingMessage) {
+              target.$lastSentContent(content);
+              target.sendFx({
+                chatId: chat.id,
+                content,
+              });
+            }
+
+            target.clearMessageText("");
+          },
+        });
+
+        createAction({
+          clock: createDirectFx.doneData,
+          source: {
+            chatInfo: $chatInfo,
+            pendingDirectSend: $pendingDirectSend,
+            text: bottomBar.$messageText,
+          },
+          target: {
+            $pendingDirectSend,
+            $lastSentContent,
+            chatChanged: messagesList.chatChanged,
+            headerChatChanged: header.chatChanged,
+            messagesChanged: messagesList.messagesChanged,
+            clearMessageText: bottomBar.messageTextChanged,
+          },
+          fn: (target, source, data) => {
+            if (!source.pendingDirectSend) {
+              return;
+            }
+
+            const content = source.text.trim();
+
+            target.$pendingDirectSend(false);
+            target.$lastSentContent(content);
+            const chat =
+              source.chatInfo.name === undefined
+                ? { id: data.chat.id }
+                : { id: data.chat.id, name: source.chatInfo.name };
+
+            target.chatChanged(chat);
+            target.headerChatChanged(chat);
+            target.messagesChanged([
+              {
+                id: data.message.id,
+                text: data.message.content,
+              },
+            ]);
+            target.clearMessageText("");
+          },
+        });
+
+        return {
+          header,
+          messagesList,
+          bottomBar,
+          mounted,
+        };
+      },
+    });
+
+    function Screen({ route }: { route: MountedInfo }) {
+      const entity = useModel(screenModel, {
+        id: route.id,
+        retain: true,
+      });
+
+      useEffect(() => {
+        entity.onMounted(route);
+      }, [entity, route]);
+
+      return (
+        <div>
+          <div data-testid={`screen-${route.id}-chat`}>
+            {entity.messagesList.chat?.id || "empty"}
+          </div>
+          <div data-testid={`screen-${route.id}-messages`}>
+            {entity.messagesList.messages.map((message) => message.text).join(",") ||
+              "empty"}
+          </div>
+          <button
+            onClick={() => entity.bottomBar.onMessageTextChanged("hello")}
+            type="button"
+          >
+            fill {route.id}
+          </button>
+          <button onClick={() => entity.bottomBar.onSendMessagePressed()} type="button">
+            send {route.id}
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(
+      scope,
+      <div>
+        <Screen route={{ id: "chat-a", kind: "chat", name: "Chat A" }} />
+        <Screen
+          route={{
+            id: "user-b",
+            draft: true,
+            kind: "user",
+            name: "User B",
+          }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("screen-chat-a-chat").textContent).toBe("chat-a");
+      expect(screen.getByTestId("screen-user-b-chat").textContent).toBe("empty");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill user-b" }));
+    fireEvent.click(screen.getByRole("button", { name: "send user-b" }));
+
+    await waitFor(() => {
+      expect(createDirectCalls).toEqual([{ id: "user-b", content: "hello" }]);
+      expect(sendCalls).toEqual([]);
+      expect(screen.getByTestId("screen-user-b-chat").textContent).toBe(
+        "direct-user-b",
+      );
+      expect(screen.getByTestId("screen-user-b-messages").textContent).toBe("hello");
+      expect(screen.getByTestId("screen-chat-a-chat").textContent).toBe("chat-a");
+    });
+  });
+
+  test("useModel keeps message text stable for retained ids with mixed derived side flows", async () => {
+    const scope = fork();
+    const typingFxCalls: Array<{ chatId: string }> = [];
+    const sendTypingFx = createEffect(async (params: { chatId: string }) => {
+      typingFxCalls.push(params);
+      return params;
+    });
+    const $chats = createStore<Record<string, { id: string }>>({
+      "chat-a": { id: "chat-a" },
+      "chat-b": { id: "chat-b" },
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const messagesList = {
+          $chatId: createStore<string | null>(null),
+          chatChanged: createEvent<string | null>(),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+        };
+        const typing = {
+          $typingSent: createStore(false),
+          typingSentChanged: createEvent<boolean>(),
+        };
+        const $chat = combine(messagesList.$chatId, $chats, (chatId, chats) =>
+          chatId ? chats[chatId] ?? null : null,
+        );
+
+        sample({
+          clock: messagesList.chatChanged,
+          target: messagesList.$chatId,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: typing.typingSentChanged,
+          target: typing.$typingSent,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: ({ chat }) => ({ chatId: chat!.id }),
+          target: sendTypingFx,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: () => true,
+          target: typing.typingSentChanged,
+        });
+
+        return {
+          messagesList: {
+            ...messagesList,
+            $chat,
+          },
+          bottomBar,
+          typing,
+        };
+      },
+    });
+
+    function Harness() {
+      const first = useModel(screenModel, {
+        id: "chat-a",
+        retain: true,
+      });
+      const second = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      useEffect(() => {
+        first.messagesList.onChatChanged("chat-a");
+        second.messagesList.onChatChanged("chat-b");
+      }, [first, second]);
+
+      return (
+        <div>
+          <div data-testid="first-text">{first.bottomBar.messageText || "empty"}</div>
+          <div data-testid="second-text">{second.bottomBar.messageText || "empty"}</div>
+          <button
+            onClick={() => second.bottomBar.onMessageTextChanged("123")}
+            type="button"
+          >
+            fill b
+          </button>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$chatId": "chat-a",
+          "bottomBar.$messageText": "",
+        },
+        "chat-b": {
+          "messagesList.$chatId": "chat-b",
+          "bottomBar.$messageText": "",
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill b" }));
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "bottomBar.$messageText": "",
+        },
+        "chat-b": {
+          "bottomBar.$messageText": "123",
+        },
+      });
+    });
+
+    expect(screen.getByTestId("first-text").textContent).toBe("empty");
+    expect(screen.getByTestId("second-text").textContent).toBe("123");
+    expect(typingFxCalls).toEqual([{ chatId: "chat-b" }]);
+  });
+
+  test("useModel keeps message text stable after switching retained ids", async () => {
+    const scope = fork();
+    const typingFxCalls: Array<{ chatId: string }> = [];
+    const sendTypingFx = createEffect(async (params: { chatId: string }) => {
+      typingFxCalls.push(params);
+      return params;
+    });
+    const $chats = createStore<Record<string, { id: string }>>({
+      "chat-a": { id: "chat-a" },
+      "chat-b": { id: "chat-b" },
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const messagesList = {
+          $chatId: createStore<string | null>(null),
+          chatChanged: createEvent<string | null>(),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+        };
+        const typing = {
+          $typingSent: createStore(false),
+          typingSentChanged: createEvent<boolean>(),
+        };
+        const $chat = combine(messagesList.$chatId, $chats, (chatId, chats) =>
+          chatId ? chats[chatId] ?? null : null,
+        );
+
+        sample({
+          clock: messagesList.chatChanged,
+          target: messagesList.$chatId,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: typing.typingSentChanged,
+          target: typing.$typingSent,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: ({ chat }) => ({ chatId: chat!.id }),
+          target: sendTypingFx,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: () => true,
+          target: typing.typingSentChanged,
+        });
+
+        return {
+          messagesList: {
+            ...messagesList,
+            $chat,
+          },
+          bottomBar,
+          typing,
+        };
+      },
+    });
+
+    function Harness({ modelId }: { modelId: string }) {
+      const entity = useModel(screenModel, {
+        id: modelId,
+        retain: true,
+      });
+
+      useEffect(() => {
+        entity.messagesList.onChatChanged(modelId);
+      }, [entity, modelId]);
+
+      return (
+        <div>
+          <div data-testid="entity-id">{entity.id}</div>
+          <div data-testid="entity-text">{entity.bottomBar.messageText || "empty"}</div>
+          <button
+            onClick={() => entity.bottomBar.onMessageTextChanged("123")}
+            type="button"
+          >
+            fill current
+          </button>
+        </div>
+      );
+    }
+
+    const view = renderInScope(scope, <Harness modelId="chat-a" />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$chatId": "chat-a",
+          "bottomBar.$messageText": "",
+        },
+      });
+    });
+
+    view.rerender(<Harness modelId="chat-b" />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "messagesList.$chatId": "chat-a",
+          "bottomBar.$messageText": "",
+        },
+        "chat-b": {
+          "messagesList.$chatId": "chat-b",
+          "bottomBar.$messageText": "",
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "fill current" }));
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-a": {
+          "bottomBar.$messageText": "",
+        },
+        "chat-b": {
+          "bottomBar.$messageText": "123",
+        },
+      });
+    });
+
+    expect(screen.getByTestId("entity-id").textContent).toBe("chat-b");
+    expect(screen.getByTestId("entity-text").textContent).toBe("123");
+    expect(typingFxCalls).toEqual([{ chatId: "chat-b" }]);
+  });
+
+  test("useModel updates a controlled nested input for retained ids", async () => {
+    const scope = fork();
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+        };
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        return {
+          bottomBar,
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="message-text">{entity.bottomBar.messageText || "empty"}</div>
+          <input
+            data-testid="message-input"
+            onChange={(event) =>
+              entity.bottomBar.onMessageTextChanged(event.currentTarget.value)
+            }
+            value={entity.bottomBar.messageText}
+          />
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-b": {
+          "bottomBar.$messageText": "",
+        },
+      });
+    });
+
+    fireEvent.change(screen.getByTestId("message-input"), {
+      target: { value: "C" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-text").textContent).toBe("C");
+      expect(
+        (screen.getByTestId("message-input") as HTMLInputElement).value,
+      ).toBe("C");
+    });
+  });
+
+  test("useModel keeps a controlled nested input stable with mixed derived side flows", async () => {
+    const scope = fork();
+    const typingFxCalls: Array<{ chatId: string }> = [];
+    const sendTypingFx = createEffect(async (params: { chatId: string }) => {
+      typingFxCalls.push(params);
+      return params;
+    });
+    const $chats = createStore<Record<string, { id: string }>>({
+      "chat-b": { id: "chat-b" },
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const messagesList = {
+          $chatId: createStore<string | null>("chat-b"),
+        };
+        const bottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+        };
+        const typing = {
+          $typingSent: createStore(false),
+          typingSentChanged: createEvent<boolean>(),
+        };
+        const $chat = combine(messagesList.$chatId, $chats, (chatId, chats) =>
+          chatId ? chats[chatId] ?? null : null,
+        );
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          target: bottomBar.$messageText,
+        });
+
+        sample({
+          clock: typing.typingSentChanged,
+          target: typing.$typingSent,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: ({ chat }) => ({ chatId: chat!.id }),
+          target: sendTypingFx,
+        });
+
+        sample({
+          clock: bottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: () => true,
+          target: typing.typingSentChanged,
+        });
+
+        return {
+          messagesList: {
+            ...messagesList,
+            $chat,
+          },
+          bottomBar,
+          typing,
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="mixed-message-text">
+            {entity.bottomBar.messageText || "empty"}
+          </div>
+          <input
+            data-testid="mixed-message-input"
+            onChange={(event) =>
+              entity.bottomBar.onMessageTextChanged(event.currentTarget.value)
+            }
+            value={entity.bottomBar.messageText}
+          />
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-b": {
+          "messagesList.$chatId": "chat-b",
+          "bottomBar.$messageText": "",
+        },
+      });
+    });
+
+    fireEvent.change(screen.getByTestId("mixed-message-input"), {
+      target: { value: "C" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mixed-message-text").textContent).toBe("C");
+      expect(
+        (screen.getByTestId("mixed-message-input") as HTMLInputElement).value,
+      ).toBe("C");
+    });
+
+    expect(typingFxCalls).toEqual([{ chatId: "chat-b" }]);
+  });
+
+  test("useModel keeps a controlled spread nested input stable with mixed derived side flows", async () => {
+    const scope = fork();
+    const typingFxCalls: Array<{ chatId: string }> = [];
+    const sendTypingFx = createEffect(async (params: { chatId: string }) => {
+      typingFxCalls.push(params);
+      return params;
+    });
+    const $chats = createStore<Record<string, { id: string }>>({
+      "chat-b": { id: "chat-b" },
+    });
+
+    const screenModel = model({
+      contract: contract({})(),
+      fn: () => {
+        const messagesList = {
+          $chatId: createStore<string | null>("chat-b"),
+        };
+        const rawBottomBar = {
+          $messageText: createStore(""),
+          messageTextChanged: createEvent<string>(),
+        };
+        const typing = {
+          $typingSent: createStore(false),
+          typingSentChanged: createEvent<boolean>(),
+        };
+        const $submitPending = createStore(false);
+        const $chat = combine(messagesList.$chatId, $chats, (chatId, chats) =>
+          chatId ? chats[chatId] ?? null : null,
+        );
+
+        sample({
+          clock: rawBottomBar.messageTextChanged,
+          target: rawBottomBar.$messageText,
+        });
+
+        sample({
+          clock: typing.typingSentChanged,
+          target: typing.$typingSent,
+        });
+
+        sample({
+          clock: rawBottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: ({ chat }) => ({ chatId: chat!.id }),
+          target: sendTypingFx,
+        });
+
+        sample({
+          clock: rawBottomBar.messageTextChanged,
+          source: {
+            chat: $chat,
+            typingSent: typing.$typingSent,
+          },
+          filter: ({ chat, typingSent }, text) =>
+            text.trim().length > 0 && Boolean(chat?.id) && !typingSent,
+          fn: () => true,
+          target: typing.typingSentChanged,
+        });
+
+        return {
+          messagesList: {
+            ...messagesList,
+            $chat,
+          },
+          bottomBar: {
+            ...rawBottomBar,
+            submitPending: $submitPending,
+          },
+          typing,
+        };
+      },
+    });
+
+    function Harness() {
+      const entity = useModel(screenModel, {
+        id: "chat-b",
+        retain: true,
+      });
+
+      return (
+        <div>
+          <div data-testid="spread-mixed-message-text">
+            {entity.bottomBar.messageText || "empty"}
+          </div>
+          <input
+            data-testid="spread-mixed-message-input"
+            onChange={(event) =>
+              entity.bottomBar.onMessageTextChanged(event.currentTarget.value)
+            }
+            value={entity.bottomBar.messageText}
+          />
+          <div data-testid="spread-submit-pending">
+            {String(entity.bottomBar.submitPending)}
+          </div>
+        </div>
+      );
+    }
+
+    renderInScope(scope, <Harness />);
+
+    await waitFor(() => {
+      expect(scope.getState(screenModel.$instances)).toMatchObject({
+        "chat-b": {
+          "messagesList.$chatId": "chat-b",
+          "bottomBar.$messageText": "",
+        },
+      });
+    });
+
+    fireEvent.change(screen.getByTestId("spread-mixed-message-input"), {
+      target: { value: "C" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("spread-mixed-message-text").textContent).toBe("C");
+      expect(
+        (screen.getByTestId("spread-mixed-message-input") as HTMLInputElement).value,
+      ).toBe("C");
+      expect(screen.getByTestId("spread-submit-pending").textContent).toBe("false");
+    });
+
+    expect(typingFxCalls).toEqual([{ chatId: "chat-b" }]);
   });
 
   test("component view preserves root id but renames nested id events to onId", async () => {

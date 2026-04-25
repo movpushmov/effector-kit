@@ -1,4 +1,5 @@
 import type { LensPredicate } from "./types";
+import { dedupeInstances } from "../models/aliases";
 
 type BaseSourceGetter = (payload: any) => Record<string, any>;
 
@@ -19,7 +20,7 @@ export function createLensState(
         instances = predicate(instances, payload);
       }
 
-      return instances;
+      return dedupeInstances(instances);
     },
     addPredicate(predicate) {
       return createLensState(getBaseSource, [...predicates, predicate]);

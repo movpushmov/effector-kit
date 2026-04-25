@@ -149,8 +149,11 @@ const counterModel = model({
 The returned model has:
 
 - `$instances`
+- `$aliases`
 - `create`
 - `delete`
+- `addAlias`
+- `removeAlias`
 - `lens`
 - `static(data)`
 
@@ -166,6 +169,61 @@ counterModel.create([
 counterModel.delete("a");
 counterModel.delete(["b", "c"]);
 ```
+
+### Instance aliases
+
+Aliases let one model instance be addressed by several ids.
+
+The original instance is still stored once in `$instances`.
+Aliases are stored separately in `$aliases` as `aliasId -> instanceId`.
+All lens reads, lens targets, refs, child models, union lenses, and React bindings resolve aliases before touching the real instance.
+
+```ts
+counterModel.create({ id: "a1", data: { count: 1 } });
+
+counterModel.addAlias({
+  aliasId: "a2",
+  instanceId: "a1",
+});
+
+// Targets the original "a1" instance through the alias id.
+sample({
+  clock: createEvent<number>(),
+  target: counterModel.lens.ids("a2").count.target(),
+});
+```
+
+`addAlias(...)` accepts an object when the target instance is known outside of a model context:
+
+```ts
+counterModel.addAlias({ aliasId: "a2", instanceId: "a1" });
+counterModel.addAlias([
+  { aliasId: "a2", instanceId: "a1" },
+  { aliasId: "a3", instanceId: "a1" },
+]);
+```
+
+`instanceId` may be either the original id or an existing alias.
+
+When the event is launched inside an instance context, it can receive just the alias id:
+
+```ts
+counterModel.addAlias("a2");
+```
+
+That form is usually reached through `lens.addAlias()`.
+
+```ts
+counterModel.removeAlias("a2");
+counterModel.removeAlias(["a2", "a3"]);
+```
+
+Alias lifecycle rules:
+
+- deleting the original instance removes all aliases that point to it
+- deleting by alias deletes the original instance and removes its aliases
+- creating an instance with an id equal to an existing alias removes that alias
+- a real instance id always wins over an alias id with the same value
 
 ### `model.static(data)`
 
@@ -294,11 +352,28 @@ selection.lens.where((entity, _, ctx) => {
 
 Filters instances by explicit ids.
 
-For regular model lenses, pass instance ids directly:
+For regular model lenses, pass instance ids or alias ids directly:
 
 ```ts
 counterModel.lens.ids("a").count.target();
+counterModel.lens.ids("a-alias").count.target();
 counterModel.lens.ids("a", "c").count.target();
+```
+
+Predicates also receive alias ids, so external messages can route by either original id or alias id.
+
+```ts
+type SocketMessage = { id: string; count: number };
+
+const socketMessageReceived = createEvent<SocketMessage>();
+
+sample({
+  clock: socketMessageReceived,
+  target: counterModel.lens
+    .props<SocketMessage>()
+    .where((entity, message) => entity.id === message.id)
+    .count.target((message) => message.count),
+});
 ```
 
 For union lenses, pass namespaced ids created with `uniqueId(...)`:
@@ -337,6 +412,26 @@ Deletes all currently matched instances.
 ```ts
 counterModel.lens.where((entity) => entity.count === 0).delete();
 ```
+
+If the selection contains an alias id, the original instance is deleted.
+All aliases that point to that original instance are removed as part of the same delete flow.
+
+### `lens.addAlias()`
+
+Creates an alias for the single currently matched instance.
+
+```ts
+const aliasCurrentCounter = createEvent<string>();
+
+sample({
+  clock: aliasCurrentCounter,
+  target: counterModel.lens.ids("a1").addAlias(),
+});
+```
+
+`lens.addAlias()` is useful when the alias is discovered from a workflow already scoped to one instance.
+If the lens matches zero instances or more than one instance, no alias is created.
+When you already know the target id, prefer `model.addAlias({ aliasId, instanceId })`.
 
 ### `lens.only(...)`
 
@@ -483,6 +578,7 @@ Important behavior:
 - child instances exist only inside parent context
 - different parent instances get isolated child collections
 - `items.lens...` works the same way as normal model lenses
+- child models have their own aliases, isolated per parent instance
 
 ## `union(models)`
 
@@ -507,6 +603,9 @@ Union lenses support:
 - `single()`
 - `delete()`
 - `match(...)`
+
+Alias ids work inside union lenses too.
+Use the same `uniqueId(variantKey, id)` helper for original ids and alias ids.
 
 `match(...)` is available both on direct union lenses and on `ref(union(...)).lens`.
 

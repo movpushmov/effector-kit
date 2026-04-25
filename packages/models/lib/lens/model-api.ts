@@ -4,6 +4,7 @@ import type { Model, ModelApi } from "../models";
 import type { ModelLensApi } from "./types";
 import { createClock, createTarget } from "./dispatch";
 import { lens } from "./lens";
+import { expandInstancesWithAliases } from "../models/aliases";
 
 function collectNestedInstances(
   parentInstances: Record<string, any>,
@@ -13,8 +14,14 @@ function collectNestedInstances(
 
   for (const [parentId, parentInstance] of Object.entries(parentInstances)) {
     const children = parentInstance?.["~children"]?.[nestedModel["~id"]] ?? {};
+    const childAliases =
+      parentInstance?.["~childAliases"]?.[nestedModel["~id"]] ?? {};
+    const childrenWithAliases = expandInstancesWithAliases(
+      children,
+      childAliases,
+    );
 
-    for (const [childId, childInstance] of Object.entries(children)) {
+    for (const [childId, childInstance] of Object.entries(childrenWithAliases)) {
       if (typeof childInstance === "object" && childInstance !== null) {
         Object.defineProperty(childInstance, "~owner", {
           value: parentInstance,

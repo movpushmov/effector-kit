@@ -231,6 +231,79 @@ export function modifyChildStore(
   });
 }
 
+export function modifyChildAliasesStore(
+  model: Model<any, any>,
+  $store: StoreWritable<any>,
+  ownerModelId?: string,
+): void {
+  reserve([$store]);
+  const stateRef = ($store as any).graphite.meta.stateRef;
+  let fallbackValue = stateRef.current;
+  Object.defineProperty(stateRef, "~fallbackCurrent", {
+    value: fallbackValue,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(stateRef, "~ownerModelId", {
+    value: ownerModelId,
+    configurable: true,
+    writable: true,
+  });
+
+  Object.defineProperty(stateRef, "current", {
+    get() {
+      const ctx = getContext();
+
+      if (!ctx.current) {
+        return fallbackValue;
+      }
+
+      const instance: BaseInstance =
+        ctx.current.owner?.instance ?? ctx.current.instance;
+
+      if (!instance["~childAliases"]) {
+        instance["~childAliases"] = {};
+      }
+
+      return instance["~childAliases"][model["~id"]] ?? {};
+    },
+    set(value) {
+      fallbackValue = value;
+      stateRef["~fallbackCurrent"] = value;
+
+      const ctx = getContext();
+
+      if (!ctx.current) {
+        return;
+      }
+
+      const instance: BaseInstance =
+        ctx.current.owner?.instance ?? ctx.current.instance;
+
+      if (!instance["~childAliases"]) {
+        instance["~childAliases"] = {};
+      }
+
+      instance["~childAliases"][model["~id"]] = value;
+      syncScopeStoreValue($store, value, ctx.current.scope as any);
+    },
+  });
+
+  createAction({
+    clock: $store,
+    target: {},
+    fn: (_: unknown, value: unknown) => {
+      const ctx = getContext();
+
+      if (!ctx.current) {
+        return;
+      }
+
+      stateRef.current = value;
+    },
+  });
+}
+
 export function reserve(units: object[]): void {
   for (const unit of units) {
     Object.defineProperty(unit, "~reserved", {

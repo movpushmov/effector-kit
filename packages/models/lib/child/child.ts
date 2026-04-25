@@ -1,9 +1,10 @@
 import { createEvent, createStore, sample } from "effector";
-import { model, type Instances, type Model } from "../models";
+import { model, type Aliases, type Instances, type Model } from "../models";
 import type { Contract } from "../contracts";
 import {
   getContext,
   getDeclarationModelId,
+  modifyChildAliasesStore,
   modifyChildStore,
 } from "../runtime";
 
@@ -15,14 +16,17 @@ export function child<
 >(inputModel: T): T {
   const ownerModelId = getDeclarationModelId();
   const $instances = createStore<Instances<ModelContract>>({});
+  const $aliases = createStore<Aliases>({});
 
   const childModel = model({
     instances: $instances,
+    aliases: $aliases,
     fn: inputModel["~fn"],
     contract: inputModel["~contract"],
   }) as T;
 
   modifyChildStore(childModel, $instances, ownerModelId);
+  modifyChildAliasesStore(childModel, $aliases, ownerModelId);
 
   if (ownerModelId) {
     (childModel.lens as any)["~setContextModelId"]?.(ownerModelId);

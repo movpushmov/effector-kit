@@ -9,6 +9,10 @@ import {
   getEntityId,
   modifyRefsStore,
 } from "../runtime";
+import {
+  expandInstancesWithAliases,
+  markSourceInstance,
+} from "../models/aliases";
 
 type RefItem = { key: string; id: string };
 
@@ -18,17 +22,19 @@ function setModelRefSource(
   $ids: ReturnType<typeof createStore<string[]>>,
 ): void {
   patchedLens["~setSource"]?.({
-    source: {
-      ids: $ids,
-      instances: model.$instances,
-    },
-    getSource: (
-      _: any,
       source: {
-        ids: string[];
-        instances: Record<string, any>;
+        ids: $ids,
+        instances: model.$instances,
+        aliases: model.$aliases,
       },
-    ) => {
+      getSource: (
+        _: any,
+        source: {
+          ids: string[];
+          instances: Record<string, any>;
+          aliases: Record<string, string>;
+        },
+      ) => {
       const ids = source?.ids ?? $ids.getState() ?? [];
 
       if (!ids.length) {
@@ -36,9 +42,14 @@ function setModelRefSource(
       }
 
       const instances = source?.instances ?? model.$instances.getState() ?? {};
+      const aliases = source?.aliases ?? model.$aliases.getState() ?? {};
+      const instancesWithAliases = expandInstancesWithAliases(
+        instances,
+        aliases,
+      );
 
       return Object.fromEntries(
-        Object.entries(instances).filter(([id]) => ids.includes(id)),
+        Object.entries(instancesWithAliases).filter(([id]) => ids.includes(id)),
       );
     },
   });
@@ -53,7 +64,13 @@ function setUnionRefSource(
     source: {
       ids: $ids,
       models: Object.fromEntries(
-        Object.entries(input.models).map(([key, model]) => [key, model.$instances]),
+        Object.entries(input.models).map(([key, model]) => [
+          key,
+          {
+            instances: model.$instances,
+            aliases: model.$aliases,
+          },
+        ]),
       ),
     },
     getSource: (
@@ -61,7 +78,13 @@ function setUnionRefSource(
       _: any,
       source: {
         ids: RefItem[];
-        models: Record<string, Record<string, any>>;
+        models: Record<
+          string,
+          {
+            instances?: Record<string, any>;
+            aliases?: Record<string, string>;
+          }
+        >;
       },
     ) => {
       const ids = source?.ids ?? $ids.getState() ?? [];
@@ -83,17 +106,27 @@ function setUnionRefSource(
           continue;
         }
 
-        const instances = source?.models?.[key] ?? model.$instances.getState() ?? {};
+        const modelSource = source?.models?.[key];
+        const instances =
+          modelSource?.instances ?? model.$instances.getState() ?? {};
+        const aliases = modelSource?.aliases ?? model.$aliases.getState() ?? {};
+        const instancesWithAliases = expandInstancesWithAliases(
+          instances,
+          aliases,
+        );
 
-        if (!instances[id]) {
+        if (!instancesWithAliases[id]) {
           continue;
         }
 
-        result[`${model["~id"]}:${id}`] = {
-          ...instances[id],
-          id,
-          "~model": key,
-        };
+        result[`${model["~id"]}:${id}`] = markSourceInstance(
+          {
+            ...instancesWithAliases[id],
+            id,
+            "~model": key,
+          },
+          instancesWithAliases[id],
+        );
       }
 
       return result;

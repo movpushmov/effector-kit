@@ -21,6 +21,7 @@ import {
   launch,
   sample,
   scopeBind,
+  type Node,
   type Scope,
   type Store,
   type StoreWritable,
@@ -37,17 +38,36 @@ import type {
 import { reactCreatedModelMeta } from "./meta";
 
 let reactModelId = 0;
+let reactLaunchPageId = 0;
 const resolvedViewEntityMarker = Symbol("resolvedViewEntity");
 const graphUpdatesCache = new WeakMap<
   AnyModel,
   ReadonlyArray<Event<unknown>>
 >();
+const launchPageRefsCache = new WeakMap<AnyModel, LaunchPageRefDescriptor[]>();
 type AnyModel = Model<any, any>;
 type InstanceData = Record<string, unknown>;
 type InstancesMap = Record<string, InstanceData>;
+type AliasesMap = Record<string, string>;
 type UnionRefInstance = { key: string; id: string };
 type EffectorStore = Store<unknown> & {
   "~field"?: string;
+};
+type StateRefStep = {
+  type?: string;
+  fn?: ((value: unknown) => unknown) | undefined;
+  from?: StateRefShape;
+};
+type StateRefShape = {
+  id?: string;
+  current: unknown;
+  initial?: unknown;
+  type?: string;
+  before?: StateRefStep[];
+};
+type LaunchPageRefDescriptor = {
+  ids: string[];
+  ref: StateRefShape;
 };
 type CreatedDescriptor = CreatedModel<AnyModel>;
 type MountedPayload = Record<string, unknown>;
@@ -163,30 +183,346 @@ function callUnitSync<Unit extends { (payload?: any): any }>(
   payload: unknown,
   scope?: Scope,
 ) {
+  const page = getScopedLaunchPageFromContext();
+
   if (scope) {
-    scopeBind(unit as any, { scope })(payload);
+    launch({
+      target: unit as unknown as UnitTargetable,
+      params: payload,
+      scope,
+      page: (page ?? null) as any,
+    } as any);
     return;
   }
 
-  (unit as any)(payload);
+  launch({
+    target: unit as unknown as UnitTargetable,
+    params: payload,
+    page: (page ?? null) as any,
+  } as any);
 }
 
 type UnitTargetable = Event<unknown> | Store<unknown>;
 
 function launchUnit(unit: unknown, payload: unknown, scope?: Scope) {
+  const page = getScopedLaunchPageFromContext();
+
   if (scope) {
     launch({
       target: unit as UnitTargetable,
       params: payload,
       scope,
-    });
+      page: (page ?? null) as any,
+    } as any);
     return;
   }
 
   launch({
     target: unit as UnitTargetable,
     params: payload,
-  });
+    page: (page ?? null) as any,
+  } as any);
+}
+
+function isStateRefShape(value: unknown): value is StateRefShape {
+  return (
+    isObject(value) &&
+    "current" in value &&
+    (typeof value.id === "string" || Array.isArray(value.before))
+  );
+}
+
+function evaluateStateRefValue(
+  stateRef: StateRefShape,
+  overrides?: Map<string, unknown>,
+  seen: Set<StateRefShape> = new Set<StateRefShape>(),
+): unknown {
+  const overrideValue =
+    typeof stateRef.id === "string" && overrides?.has(stateRef.id)
+      ? overrides.get(stateRef.id)
+      : undefined;
+
+  if (seen.has(stateRef)) {
+    return overrideValue ?? stateRef.current;
+  }
+
+  seen.add(stateRef);
+
+  if (!Array.isArray(stateRef.before) || stateRef.before.length === 0) {
+    return overrideValue ?? stateRef.current;
+  }
+
+  if (stateRef.type === "list") {
+    return stateRef.before.map((step) =>
+      step.from ? evaluateStateRefValue(step.from, overrides, seen) : undefined,
+    );
+  }
+
+  if (stateRef.type === "shape") {
+    const template =
+      stateRef.current && typeof stateRef.current === "object"
+        ? (stateRef.current as Record<string, unknown>)
+        : stateRef.initial && typeof stateRef.initial === "object"
+          ? (stateRef.initial as Record<string, unknown>)
+          : {};
+    const keys = Object.keys(template);
+
+    return Object.fromEntries(
+      stateRef.before.map((step, index) => [
+        keys[index] ?? String(index),
+        step.from ? evaluateStateRefValue(step.from, overrides, seen) : undefined,
+      ]),
+    );
+  }
+
+  if (stateRef.before.length === 1) {
+    const step = stateRef.before[0]!;
+    const source = step.from
+      ? evaluateStateRefValue(step.from, overrides, seen)
+      : undefined;
+
+    return step.fn ? step.fn(source) : source;
+  }
+
+  return stateRef.current;
+}
+
+function collectLaunchPageStateOverrides(
+  model: AnyModel,
+  instance: InstanceData,
+  scope?: Scope,
+): Map<string, unknown> {
+  const overrides = new Map<string, unknown>();
+  const scopeReg = (scope as
+    | (Scope & { reg?: Record<string, { current: unknown }> })
+    | undefined)?.reg;
+
+  for (const store of collectGraphStores(model)) {
+    const meta = (store as StoreWritable<unknown> & {
+      graphite?: {
+        meta?: {
+          rootStateRefId?: string;
+          stateRef?: StateRefShape;
+        };
+      };
+    }).graphite?.meta;
+
+    if (!meta?.stateRef) {
+      continue;
+    }
+
+    const field = (store as EffectorStore)["~field"];
+    const rootId = meta.rootStateRefId;
+    const stateRefId =
+      typeof meta.stateRef.id === "string" ? meta.stateRef.id : undefined;
+
+    let hasValue = false;
+    let value: unknown;
+
+    if (typeof field === "string" && field in instance) {
+      value = instance[field];
+      hasValue = true;
+    } else if (rootId && scopeReg?.[rootId]) {
+      value = scopeReg[rootId]!.current;
+      hasValue = true;
+    } else if (stateRefId && scopeReg?.[stateRefId]) {
+      value = scopeReg[stateRefId]!.current;
+      hasValue = true;
+    } else {
+      try {
+        value = withInstanceContext(
+          model,
+          instance,
+          () => (scope ? scope.getState(store) : store.getState()),
+          scope,
+        );
+        hasValue = true;
+      } catch {
+        hasValue = false;
+      }
+    }
+
+    if (!hasValue) {
+      continue;
+    }
+
+    if (rootId) {
+      overrides.set(rootId, value);
+    }
+
+    if (stateRefId) {
+      overrides.set(stateRefId, value);
+    }
+  }
+
+  if (!scopeReg) {
+    return overrides;
+  }
+
+  for (const [id, ref] of Object.entries(scopeReg)) {
+    if (!overrides.has(id)) {
+      overrides.set(id, ref.current);
+    }
+  }
+
+  return overrides;
+}
+
+function collectRegionNodes(root: Node): Node[] {
+  const visited = new Set<Node>();
+  const nodes: Node[] = [];
+
+  function visit(node: Node): void {
+    if (visited.has(node)) {
+      return;
+    }
+
+    visited.add(node);
+    nodes.push(node);
+
+    for (const link of node.family.links) {
+      visit(link);
+    }
+  }
+
+  visit(root);
+
+  return nodes;
+}
+
+function collectLaunchPageRefDescriptors(model: AnyModel): LaunchPageRefDescriptor[] {
+  const cached = launchPageRefsCache.get(model);
+
+  if (cached) {
+    return cached;
+  }
+
+  const descriptors = new Map<
+    string,
+    {
+      ids: Set<string>;
+      ref: StateRefShape;
+    }
+  >();
+
+  function rememberStateRef(ref: unknown, alias?: string): void {
+    if (!isStateRefShape(ref) || typeof ref.id !== "string") {
+      return;
+    }
+
+    const hasDerivedInputs =
+      Array.isArray(ref.before) && ref.before.length > 0;
+
+    if (!alias && !hasDerivedInputs) {
+      return;
+    }
+
+    const existing = descriptors.get(ref.id) ?? {
+      ids: new Set<string>(),
+      ref,
+    };
+
+    existing.ids.add(ref.id);
+
+    if (alias) {
+      existing.ids.add(alias);
+    }
+
+    descriptors.set(ref.id, existing);
+
+    if (!Array.isArray(ref.before)) {
+      return;
+    }
+
+    for (const step of ref.before) {
+      if (step.from) {
+        rememberStateRef(step.from);
+      }
+    }
+  }
+
+  for (const store of collectGraphStores(model)) {
+    const meta = (store as StoreWritable<unknown> & {
+      graphite?: {
+        meta?: {
+          rootStateRefId?: string;
+          stateRef?: StateRefShape;
+        };
+      };
+    }).graphite?.meta;
+
+    if (!meta?.stateRef) {
+      continue;
+    }
+
+    rememberStateRef(meta.stateRef, meta.rootStateRefId);
+  }
+
+  const region = (model as AnyModel & { "~region"?: Node })["~region"];
+  const regionNodes = region ? collectRegionNodes(region) : [];
+
+  for (const node of regionNodes) {
+    for (const step of node.seq) {
+      const data = step.data;
+
+      if (!isObject(data) || !("store" in data)) {
+        continue;
+      }
+
+      rememberStateRef((data as { store?: unknown }).store);
+    }
+  }
+
+  const collected = Array.from(descriptors.values(), ({ ids, ref }) => ({
+    ids: Array.from(ids),
+    ref,
+  }));
+
+  launchPageRefsCache.set(model, collected);
+
+  return collected;
+}
+
+function createScopedLaunchPage(
+  model: AnyModel,
+  instance: InstanceData,
+  scope?: Scope,
+) {
+  reactLaunchPageId += 1;
+
+  const reg: Record<string, StateRefShape> = {};
+  const overrides = collectLaunchPageStateOverrides(model, instance, scope);
+
+  for (const { ids, ref } of collectLaunchPageRefDescriptors(model)) {
+    const snapshot = Object.assign({}, ref, {
+      current: evaluateStateRefValue(ref, overrides),
+    });
+
+    for (const id of ids) {
+      reg[id] = snapshot;
+    }
+  }
+
+  return {
+    fullID: `react-launch-page-${reactLaunchPageId}`,
+    parent: null,
+    reg,
+    "~modelsScopedPage": true,
+  };
+}
+
+function getScopedLaunchPageFromContext() {
+  const current = getContext().current;
+
+  if (!current?.model || !current.instance) {
+    return null;
+  }
+
+  return createScopedLaunchPage(
+    current.model as AnyModel,
+    current.instance as InstanceData,
+    current.scope,
+  );
 }
 
 function getModelInstance<T extends AnyModel>(
@@ -197,8 +533,42 @@ function getModelInstance<T extends AnyModel>(
   const instances = scope
     ? scope.getState(model.$instances)
     : model.$instances.getState();
+  const aliases = scope
+    ? scope.getState(model.$aliases)
+    : model.$aliases.getState();
+  const resolvedId = resolveModelInstanceId(instances, aliases, id);
 
-  return instances[id] as InstanceData | undefined;
+  return resolvedId
+    ? (instances[resolvedId] as InstanceData | undefined)
+    : undefined;
+}
+
+function hasOwn(source: InstancesMap, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(source, key);
+}
+
+function resolveModelInstanceId(
+  instances: InstancesMap,
+  aliases: AliasesMap,
+  id: string,
+): string | undefined {
+  if (hasOwn(instances, id)) {
+    return id;
+  }
+
+  const visited = new Set<string>();
+  let current = aliases[id];
+
+  while (current !== undefined && !visited.has(current)) {
+    if (hasOwn(instances, current)) {
+      return current;
+    }
+
+    visited.add(current);
+    current = aliases[current];
+  }
+
+  return undefined;
 }
 
 function getApiElementByPath(api: ModelApi, path: string[]): unknown {
@@ -269,8 +639,7 @@ function readFieldValue(
   }
 
   const store = unit as EffectorStore;
-
-  return withInstanceContext(
+  const result = withInstanceContext(
     model,
     instance,
     () => {
@@ -313,6 +682,8 @@ function readFieldValue(
     },
     scope,
   );
+
+  return result;
 }
 
 function bindUnit(
@@ -322,10 +693,15 @@ function bindUnit(
   scope?: Scope,
 ) {
   if (typeof unit === "function") {
-    const boundUnit = scope ? scopeBind(unit, { scope }) : unit;
-
     return (payload?: unknown) =>
-      withInstanceContext(model, instance, () => boundUnit(payload), scope);
+      withInstanceContext(
+        model,
+        instance,
+        () => {
+          launchUnit(unit, payload, scope);
+        },
+        scope,
+      );
   }
 
   return undefined;
@@ -362,13 +738,9 @@ function resolveRefValue(
   const target = refModel["~target"];
 
   if (modelIs.model(target)) {
-    const instances = scope
-      ? scope.getState(target.$instances)
-      : target.$instances.getState();
-
     return (ids as string[])
       .map((id) => {
-        const data = instances[id];
+        const data = getModelInstance(target, id, scope);
 
         if (!data) {
           return null;
@@ -388,17 +760,14 @@ function resolveRefValue(
           return null;
         }
 
-        const instances = scope
-          ? scope.getState(variantModel.$instances)
-          : variantModel.$instances.getState();
-        const data = instances[item.id];
+        const data = getModelInstance(variantModel, item.id, scope);
 
         if (!data) {
           return null;
         }
 
         return {
-          ...resolveEntity(variantModel, item.id, data),
+          ...resolveEntity(variantModel, item.id, data, scope),
           variant: item.key,
         };
       })
@@ -560,7 +929,7 @@ export function collectGraphStores(
   seenModels: Set<string> = new Set<string>(),
   seenRefs: Set<string> = new Set<string>(),
 ): Store<unknown>[] {
-  const stores: Array<Store<unknown>> = [model.$instances];
+  const stores: Array<Store<unknown>> = [model.$instances, model.$aliases];
 
   if (seenModels.has(model["~id"])) {
     return stores;
@@ -774,12 +1143,24 @@ export function resolveLensEntities<T extends Model<any, any>>(
   lens: Lens<T>,
   scope?: Scope,
 ): ReactModelEntity<T>[] {
-  const source = scope ? scope.getState(model.$instances) : undefined;
+  const source = scope
+    ? {
+        instances: scope.getState(model.$instances),
+        aliases: scope.getState(model.$aliases),
+      }
+    : undefined;
   const instances = (
     lens as {
-      getSource(source?: InstancesMap): InstancesMap;
+      getSource(
+        source?:
+          | InstancesMap
+          | {
+              instances: InstancesMap;
+              aliases: AliasesMap;
+            },
+      ): InstancesMap;
     }
-  ).getSource(source as InstancesMap | undefined);
+  ).getSource(source);
 
   return Object.entries(instances).map(([id, instance]) =>
     resolveEntity(model, id, instance, scope),

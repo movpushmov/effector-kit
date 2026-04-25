@@ -4,6 +4,10 @@ import type { Model } from "../models";
 import type { Union, UnionMap } from "../union";
 import { createModelLensApi } from "./model-api";
 import {
+  expandInstancesWithAliases,
+  markSourceInstance,
+} from "../models/aliases";
+import {
   firstPredicate,
   idsPredicate,
   lastPredicate,
@@ -47,7 +51,14 @@ type LensConfig = ModelLensConfig | UnionLensConfig;
 function collectUnionInstances(
   models: UnionMap,
   activeKeys: string[],
-  source?: Record<string, Record<string, any>>,
+  source?: Record<
+    string,
+    | Record<string, any>
+    | {
+        instances?: Record<string, any>;
+        aliases?: Record<string, string>;
+      }
+  >,
 ): Record<string, any> {
   const result: Record<string, any> = {};
 
@@ -58,10 +69,28 @@ function collectUnionInstances(
       continue;
     }
 
-    const instances = source?.[key] ?? model.$instances.getState() ?? {};
+    const modelSource = source?.[key];
+    const instances =
+      modelSource &&
+      "instances" in modelSource &&
+      modelSource.instances !== undefined
+        ? modelSource.instances
+        : (modelSource as Record<string, any> | undefined) ??
+          model.$instances.getState() ??
+          {};
+    const aliases =
+      modelSource &&
+      "aliases" in modelSource &&
+      modelSource.aliases !== undefined
+        ? modelSource.aliases
+        : model.$aliases.getState() ?? {};
+    const instancesWithAliases = expandInstancesWithAliases(instances, aliases);
 
-    for (const [id, data] of Object.entries(instances)) {
-      result[`${model["~id"]}:${id}`] = { ...(data as any), id, "~model": key };
+    for (const [id, data] of Object.entries(instancesWithAliases)) {
+      result[`${model["~id"]}:${id}`] = markSourceInstance(
+        { ...(data as any), id, "~model": key },
+        data,
+      );
     }
   }
 
@@ -92,17 +121,47 @@ function selectVariantInstances(
 
 function getUnionSource(input: Union<UnionMap>) {
   return Object.fromEntries(
-    Object.entries(input.models).map(([key, model]) => [key, model.$instances]),
+    Object.entries(input.models).map(([key, model]) => [
+      key,
+      {
+        instances: model.$instances,
+        aliases: model.$aliases,
+      },
+    ]),
+  );
+}
+
+function getModelSource(model: Model<any, any>) {
+  return {
+    instances: model.$instances,
+    aliases: model.$aliases,
+  };
+}
+
+function getExpandedModelInstances(model: Model<any, any>): Record<string, any> {
+  return expandInstancesWithAliases(
+    model.$instances.getState() ?? {},
+    model.$aliases.getState() ?? {},
   );
 }
 
 function createModelConfig(
   model: Model<any, any>,
-  sourceGetter: ModelSourceGetter = (_, source) =>
-    source ?? model.$instances.getState(),
+  sourceGetter: ModelSourceGetter = (_, source) => {
+    const instances =
+      source && "instances" in source && source.instances !== undefined
+        ? source.instances
+        : source ?? model.$instances.getState();
+    const aliases =
+      source && "aliases" in source && source.aliases !== undefined
+        ? source.aliases
+        : model.$aliases.getState();
+
+    return expandInstancesWithAliases(instances ?? {}, aliases ?? {});
+  },
   getTargetModel: () => Model<any, any> = () => model,
   getContextModelId: () => string = () => model["~id"],
-  source: any = model.$instances,
+  source: any = getModelSource(model),
 ): ModelLensConfig {
   return {
     kind: "model",
@@ -202,6 +261,50 @@ function buildModelLens(config: ModelLensConfig): any {
       return createLensRoot(
         cloneModelConfig(config, singlePredicate, { singleResult: true }),
       );
+    },
+    addAlias() {
+      const addAliasEvent = createEvent<any>();
+      const resolvedAliasAdded = createEvent<any>();
+
+      sample({
+        clock: addAliasEvent,
+        fn: (payload) => {
+          if (typeof payload !== "string" && payload.instanceId !== undefined) {
+            return payload;
+          }
+
+          const entries = Object.entries(
+            createLensState(
+              (payload) => config.sourceRef.current(payload),
+              config.predicates,
+            ).getSource(payload),
+          );
+
+          if (entries.length !== 1) {
+            return null;
+          }
+
+          const [id] = entries[0]!;
+
+          if (typeof payload === "string") {
+            return { aliasId: payload, instanceId: id };
+          }
+
+          return {
+            ...payload,
+            instanceId: payload.instanceId ?? id,
+          };
+        },
+        target: resolvedAliasAdded,
+      });
+
+      sample({
+        clock: resolvedAliasAdded,
+        filter: (payload) => payload !== null,
+        target: config.model.addAlias,
+      });
+
+      return addAliasEvent;
     },
     delete() {
       const deleteEvent = createEvent<void>();
@@ -395,7 +498,7 @@ function buildUnionLens(config: UnionLensConfig): any {
               selectVariantInstances(
                 state.getSource(payload),
                 key,
-                model.$instances.getState() ?? {},
+                getExpandedModelInstances(model),
               ),
             () => model,
             () => config.contextModelId ?? model["~id"],
@@ -428,11 +531,11 @@ function buildUnionLens(config: UnionLensConfig): any {
       createModelConfig(
         model,
         (payload) =>
-          selectVariantInstances(
-            state.getSource(payload),
-            key,
-            model.$instances.getState() ?? {},
-          ),
+            selectVariantInstances(
+              state.getSource(payload),
+              key,
+              getExpandedModelInstances(model),
+            ),
         () => model,
         () => config.contextModelId ?? model["~id"],
       ),

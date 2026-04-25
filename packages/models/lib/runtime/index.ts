@@ -9,6 +9,7 @@ export {
 export { withInstanceContext } from "./with-instance-context";
 export {
   modifyStore,
+  modifyChildAliasesStore,
   modifyChildStore,
   modifyRefsStore,
   reserve,

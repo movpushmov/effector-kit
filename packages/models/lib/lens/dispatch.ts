@@ -73,15 +73,17 @@ export function createTarget(
     const actionFx = createEffect(
       async ({
         payload,
+        props,
         context,
       }: {
         payload: any;
+        props: any;
         context: ReturnType<typeof getContext>;
       }) => {
         const sourceContext =
           context.current?.model["~id"] === getContextModelId() ? context : {};
         setContext(sourceContext);
-        const instances = getInstances(payload);
+        const instances = getInstances(props);
         const shouldResetStaleContext = Boolean(
           context.current &&
             context.current.model["~id"] !== getContextModelId() &&
@@ -129,12 +131,14 @@ export function createTarget(
               target: element,
               params: payload,
               scope: baseCurrent.scope,
-            });
+              page: null as any,
+            } as any);
           } else {
             launch({
               target: element,
               params: payload,
-            });
+              page: null as any,
+            } as any);
           }
 
           if (!capturedScope) {
@@ -150,6 +154,7 @@ export function createTarget(
       clock: target,
       fn: (payload) => ({
         payload: map ? map(payload) : payload,
+        props: payload,
         context: getContext(),
       }),
       target: actionFx,

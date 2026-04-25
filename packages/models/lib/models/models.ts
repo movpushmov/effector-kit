@@ -11,6 +11,8 @@ import type {
   ContractApi,
   ContractData,
   CreateInstancePayload,
+  Aliases,
+  AddAliasPayload,
   Instances,
   Model,
   ModelApi,
@@ -18,6 +20,7 @@ import type {
 import {
   bindRegionModel,
   modifyDeclarations,
+  getContext,
   getDeclarationModelId,
   getEntityId,
   modifyStore,
@@ -25,11 +28,19 @@ import {
 } from "../runtime";
 import { createApi, createStaticApi } from "./create-api";
 import { lens } from "../lens";
+import {
+  addAliases,
+  removeAliases,
+  removeAliasesForCreatedInstances,
+  removeAliasesForDeletedPayload,
+  resolveDeleteIds,
+} from "./aliases";
 
 interface ModelOptions<T extends Contract<any>, Api extends ModelApi> {
   contract: T;
   fn: (api: ContractApi<T>) => Api;
   instances?: StoreWritable<Instances<T>>;
+  aliases?: StoreWritable<Aliases>;
 }
 
 function isPlainModelApiObject(value: unknown): value is Record<string, unknown> {
@@ -51,15 +62,19 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
   contract,
   fn,
   instances,
+  aliases,
 }: ModelOptions<T, Api>): Model<T, Api> {
   const modelId = getEntityId();
   const $instances = instances ?? createStore<Instances<T>>({});
+  const $aliases = aliases ?? createStore<Aliases>({});
 
   const createInstance = createEvent<
     CreateInstancePayload<T> | CreateInstancePayload<T>[]
   >();
 
   const deleteInstance = createEvent<string | string[]>();
+  const addAlias = createEvent<AddAliasPayload | AddAliasPayload[]>();
+  const removeAlias = createEvent<string | string[]>();
 
   const localStoreDefaults: Record<string, unknown> = {};
 
@@ -152,10 +167,20 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
   });
 
   sample({
+    clock: createInstance,
+    source: $aliases,
+    fn: removeAliasesForCreatedInstances,
+    target: $aliases,
+  });
+
+  sample({
     clock: deleteInstance,
-    source: $instances,
-    fn: (instances: Instances<T>, id: string | string[]): Instances<T> => {
-      const toRemove = Array.isArray(id) ? id : [id];
+    source: {
+      instances: $instances,
+      aliases: $aliases,
+    },
+    fn: ({ instances, aliases }, id: string | string[]): Instances<T> => {
+      const toRemove = resolveDeleteIds(instances, aliases, id);
       const copy: Instances<T> = { ...instances };
 
       for (const id of toRemove) {
@@ -167,6 +192,36 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
     target: $instances,
   });
 
+  sample({
+    clock: deleteInstance,
+    source: $aliases,
+    fn: removeAliasesForDeletedPayload,
+    target: $aliases,
+  });
+
+  sample({
+    clock: addAlias,
+    source: {
+      instances: $instances,
+      aliases: $aliases,
+    },
+    fn: ({ instances, aliases }, payload): Aliases => {
+      const ctx = getContext();
+      const contextInstance =
+        ctx.current?.model["~id"] === modelId ? ctx.current.instance : undefined;
+
+      return addAliases(aliases, instances, payload, contextInstance);
+    },
+    target: $aliases,
+  });
+
+  sample({
+    clock: removeAlias,
+    source: $aliases,
+    fn: removeAliases,
+    target: $aliases,
+  });
+
   const builtModel = {
     "~kind": "model",
     "~contract": contract,
@@ -175,11 +230,15 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
     "~localStoreDefaults": localStoreDefaults,
 
     "~id": modelId,
+    "~region": region,
 
     $instances,
+    $aliases,
 
     create: createInstance,
     delete: deleteInstance,
+    addAlias,
+    removeAlias,
   } as unknown as Model<T, Api>;
 
   const builtLens = lens(builtModel);

@@ -7,8 +7,10 @@ type StoreDescriptor = {
   field?: string;
   store: {
     targetable?: boolean;
+    getState: () => unknown;
     graphite: {
       meta: {
+        rootStateRefId?: string;
         stateRef: {
           current: unknown;
           initial?: unknown;
@@ -140,6 +142,53 @@ function evaluateStateRef(stateRef: StateRefShape): unknown {
   return stateRef.current;
 }
 
+function primeScopeRefs(
+  descriptors: StoreDescriptor[],
+  instance: Record<string, any>,
+  scope?: Scope,
+): void {
+  const scopeReg = (scope as
+    | (Scope & {
+        reg?: Record<string, { current: unknown }>;
+      })
+    | undefined)?.reg;
+
+  if (!scopeReg) {
+    return;
+  }
+
+  for (const { field, store } of descriptors) {
+    if (store.targetable !== true) {
+      continue;
+    }
+
+    const rootId = store.graphite.meta.rootStateRefId;
+
+    if (!rootId) {
+      continue;
+    }
+
+    const nextValue =
+      typeof field === "string" && field in instance
+        ? instance[field]
+        : (() => {
+            try {
+              return store.getState();
+            } catch {
+              return store.graphite.meta.stateRef.current;
+            }
+          })();
+
+    if (!scopeReg[rootId]) {
+      scopeReg[rootId] = Object.assign({}, store.graphite.meta.stateRef, {
+        current: nextValue,
+      });
+    } else {
+      scopeReg[rootId]!.current = nextValue;
+    }
+  }
+}
+
 export function withInstanceContext<T>(
   model: Model<any, any>,
   instance: Record<string, any>,
@@ -147,8 +196,13 @@ export function withInstanceContext<T>(
   scope?: Scope,
 ): T {
   const previous = getContext();
-  const descriptors = collectStoreDescriptors(model["~api"] as Record<string, unknown>);
-  const snapshots = descriptors.map(({ store }) => ({
+  const descriptors = collectStoreDescriptors(
+    model["~api"] as Record<string, unknown>,
+  );
+  const derivedDescriptors = descriptors.filter(
+    ({ store }) => store.targetable !== true,
+  );
+  const snapshots = derivedDescriptors.map(({ store }) => ({
     store,
     value: store.graphite.meta.stateRef.current,
   }));
@@ -170,19 +224,13 @@ export function withInstanceContext<T>(
   });
 
   try {
-    for (const { field, store } of descriptors) {
-      if (store.targetable !== true || !field || !(field in instance)) {
-        continue;
-      }
+    primeScopeRefs(descriptors, instance, scope);
 
-      store.graphite.meta.stateRef.current = instance[field];
-    }
-
-    for (const { store } of descriptors) {
-      if (store.targetable === true) {
-        continue;
-      }
-
+    for (const { store } of derivedDescriptors) {
+      // Writable model stores already read from the active runtime context via
+      // their patched stateRef getters. Touching their stateRefs during a read
+      // turns a render-time read into an in-place instance write, which leaks
+      // values across ids. Only derived refs need temporary recomputation here.
       store.graphite.meta.stateRef.current = evaluateStateRef(
         store.graphite.meta.stateRef as unknown as StateRefShape,
       );

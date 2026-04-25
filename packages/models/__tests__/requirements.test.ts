@@ -910,6 +910,111 @@ describe("models api", () => {
         b: { title: "Todo #2", done: true },
       });
     });
+
+    test("adds and removes aliases for existing instances", async () => {
+      const scope = fork();
+
+      await createInstances(scope, counterModel.create, [
+        { id: "a1", data: { count: 1 } },
+      ]);
+
+      await allSettled(counterModel.addAlias, {
+        scope,
+        params: { aliasId: "a2", instanceId: "a1" },
+      });
+
+      expect(scope.getState(counterModel.$aliases)).toStrictEqual({
+        a2: "a1",
+      });
+
+      await allSettled(counterModel.removeAlias, {
+        scope,
+        params: "a2",
+      });
+
+      expect(scope.getState(counterModel.$aliases)).toStrictEqual({});
+    });
+
+    test("cleans aliases when original instance is deleted", async () => {
+      const scope = fork();
+
+      await createInstances(scope, counterModel.create, [
+        { id: "a1", data: { count: 1 } },
+        { id: "b1", data: { count: 2 } },
+      ]);
+
+      await allSettled(counterModel.addAlias, {
+        scope,
+        params: { aliasId: "a2", instanceId: "a1" },
+      });
+
+      await allSettled(counterModel.addAlias, {
+        scope,
+        params: { aliasId: "b2", instanceId: "b1" },
+      });
+
+      await allSettled(counterModel.delete, {
+        scope,
+        params: "a1",
+      });
+
+      expect(scope.getState(counterModel.$instances)).toStrictEqual({
+        b1: { count: 2 },
+      });
+      expect(scope.getState(counterModel.$aliases)).toStrictEqual({
+        b2: "b1",
+      });
+    });
+
+    test("deletes original instance when deletion is requested by alias", async () => {
+      const scope = fork();
+
+      await createInstances(scope, counterModel.create, [
+        { id: "a1", data: { count: 1 } },
+      ]);
+
+      await allSettled(counterModel.addAlias, {
+        scope,
+        params: { aliasId: "a2", instanceId: "a1" },
+      });
+
+      await allSettled(counterModel.delete, {
+        scope,
+        params: "a2",
+      });
+
+      expect(scope.getState(counterModel.$instances)).toStrictEqual({});
+      expect(scope.getState(counterModel.$aliases)).toStrictEqual({});
+    });
+
+    test("creating an instance with an existing alias id removes that alias", async () => {
+      const scope = fork();
+
+      await createInstances(scope, counterModel.create, [
+        { id: "a1", data: { count: 1 } },
+      ]);
+
+      await allSettled(counterModel.addAlias, {
+        scope,
+        params: { aliasId: "a2", instanceId: "a1" },
+      });
+
+      await allSettled(counterModel.create, {
+        scope,
+        params: { id: "a2", data: { count: 2 } },
+      });
+
+      await allSettled(counterModel.lens.ids("a2").setCount.target(), {
+        scope,
+        params: 3,
+      });
+
+      expect(scope.getState(counterModel.$instances)).toStrictEqual({
+        a1: { count: 1 },
+        a2: { count: 3 },
+      });
+      expect(scope.getState(counterModel.$aliases)).toStrictEqual({});
+    });
   });
 
   describe("ref", () => {
@@ -1915,6 +2020,114 @@ describe("models api", () => {
           a: { count: 60 },
           b: { count: 2 },
           c: { count: 60 },
+        });
+      });
+
+      test("targets model instances by alias ids", async () => {
+        const scope = fork();
+
+        await createInstances(scope, counterModel.create, [
+          { id: "a1", data: { count: 1 } },
+          { id: "b1", data: { count: 2 } },
+        ]);
+
+        await allSettled(counterModel.addAlias, {
+          scope,
+          params: { aliasId: "a2", instanceId: "a1" },
+        });
+
+        await allSettled(counterModel.lens.ids("a2").setCount.target(), {
+          scope,
+          params: 61,
+        });
+
+        expect(scope.getState(counterModel.$instances)).toStrictEqual({
+          a1: { count: 61 },
+          b1: { count: 2 },
+        });
+      });
+
+      test("matches alias ids in props-based lens predicates", async () => {
+        const scope = fork();
+        const websocketMessage = createEvent<{ id: string; count: number }>();
+
+        sample({
+          clock: websocketMessage,
+          target: counterModel.lens
+            .props<{ id: string; count: number }>()
+            .where((entity, payload) => entity.id === payload.id)
+            .setCount.target((payload) => payload.count),
+        });
+
+        await createInstances(scope, counterModel.create, [
+          { id: "a1", data: { count: 1 } },
+          { id: "b1", data: { count: 2 } },
+        ]);
+
+        await allSettled(counterModel.addAlias, {
+          scope,
+          params: { aliasId: "a2", instanceId: "a1" },
+        });
+
+        await allSettled(websocketMessage, {
+          scope,
+          params: { id: "a2", count: 62 },
+        });
+
+        expect(scope.getState(counterModel.$instances)).toStrictEqual({
+          a1: { count: 62 },
+          b1: { count: 2 },
+        });
+      });
+
+      test("watches model updates through alias ids", async () => {
+        const scope = fork();
+        const seen: number[] = [];
+
+        counterModel.lens
+          .ids("a2")
+          .count.clock()
+          .watch((value) => seen.push(value));
+
+        await createInstances(scope, counterModel.create, [
+          { id: "a1", data: { count: 1 } },
+        ]);
+
+        await allSettled(counterModel.addAlias, {
+          scope,
+          params: { aliasId: "a2", instanceId: "a1" },
+        });
+
+        await allSettled(counterModel.lens.ids("a1").setCount.target(), {
+          scope,
+          params: 63,
+        });
+
+        expect(seen).toStrictEqual([63]);
+      });
+
+      test("creates aliases from a selected lens instance", async () => {
+        const scope = fork();
+
+        await createInstances(scope, counterModel.create, [
+          { id: "a1", data: { count: 1 } },
+        ]);
+
+        await allSettled(counterModel.lens.ids("a1").addAlias(), {
+          scope,
+          params: "a2",
+        });
+
+        await allSettled(counterModel.lens.ids("a2").setCount.target(), {
+          scope,
+          params: 64,
+        });
+
+        expect(scope.getState(counterModel.$aliases)).toStrictEqual({
+          a2: "a1",
+        });
+        expect(scope.getState(counterModel.$instances)).toStrictEqual({
+          a1: { count: 64 },
         });
       });
 

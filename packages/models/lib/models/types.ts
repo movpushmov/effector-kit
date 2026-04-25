@@ -2,6 +2,7 @@ import type {
   Effect,
   Event,
   EventCallable,
+  Node,
   Store,
   StoreWritable,
 } from "effector";
@@ -20,6 +21,15 @@ export type Instances<T extends Contract<any>> = Record<
   string,
   ContractData<T>
 >;
+
+export type Aliases = Record<string, string>;
+
+export type AddAliasPayload =
+  | string
+  | {
+      aliasId: string;
+      instanceId?: string;
+    };
 
 type OmitNever<T> = { [K in keyof T as T[K] extends never ? never : K]: T[K] };
 
@@ -84,10 +94,14 @@ export interface Model<T extends Contract<any>, Api extends ModelApi> {
   "~api": Api;
   "~fn": (api: ContractApi<T>) => Api;
   "~id": string;
+  "~region": Node;
 
   $instances: Store<Record<string, BaseInstance & ContractData<T>>>;
+  $aliases: Store<Aliases>;
   create: EventCallable<CreateInstancePayload<T> | CreateInstancePayload<T>[]>;
   delete: EventCallable<string | string[]>;
+  addAlias: EventCallable<AddAliasPayload | AddAliasPayload[]>;
+  removeAlias: EventCallable<string | string[]>;
 
   lens: Lens<ModelLensTarget<T, Api>> & LensProps<ModelLensTarget<T, Api>>;
 
@@ -97,4 +111,5 @@ export interface Model<T extends Contract<any>, Api extends ModelApi> {
 export interface BaseInstance {
   "~refs": Record<string, Array<{ model: Model<any, any>; id: string }>>;
   "~children": Record<string, Record<string, unknown>>;
+  "~childAliases": Record<string, Aliases>;
 }

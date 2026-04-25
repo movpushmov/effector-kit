@@ -6,7 +6,13 @@ import type {
   StoreWritable,
 } from "effector";
 import type { Contract } from "../contracts";
-import type { ContractData, Model, ModelApi, ModelApiElement } from "../models";
+import type {
+  AddAliasPayload,
+  ContractData,
+  Model,
+  ModelApi,
+  ModelApiElement,
+} from "../models";
 import type { Union, UnionMap } from "../union";
 
 export type LensPredicate = (
@@ -88,6 +94,7 @@ type LensApi<
   last(): SingleLens<Input, Props>;
   single(): SingleLens<Input, Props>;
   delete(): EventCallable<void>;
+  addAlias(): EventCallable<AddAliasPayload>;
 };
 
 // ---- Union lens types ----

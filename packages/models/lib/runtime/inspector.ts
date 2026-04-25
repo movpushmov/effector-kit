@@ -23,6 +23,7 @@ type StoreDescriptor = {
   rootId: string;
   field?: string;
   store: {
+    targetable?: boolean;
     getState: () => unknown;
     graphite: {
       meta: {
@@ -333,6 +334,10 @@ function primeStoreScopes(
   );
 
   for (const { key, rootId, field, store } of descriptors) {
+    if (store.targetable !== true) {
+      continue;
+    }
+
     let instanceValue: unknown;
 
     if (key && key in instance) {
@@ -366,6 +371,28 @@ function primeStoreScopes(
   }
 }
 
+function collectRegionNodes(root: Node): Node[] {
+  const visited = new Set<Node>();
+  const nodes: Node[] = [];
+
+  function visit(node: Node): void {
+    if (visited.has(node)) {
+      return;
+    }
+
+    visited.add(node);
+    nodes.push(node);
+
+    for (const link of node.family.links) {
+      visit(link);
+    }
+  }
+
+  visit(root);
+
+  return nodes;
+}
+
 function modifyRegion(node: Node) {
   const patchedNodes = new WeakSet<Node>();
   const patchedEffects = new Set<string>();
@@ -382,6 +409,14 @@ function modifyRegion(node: Node) {
     setContext(context);
 
     if (stack.scope) {
+      // Model state is routed through the active scope plus instance context.
+      // If an inherited Effector page leaks into this stack, `source: store`
+      // reads can observe another retained instance via page.reg before they
+      // ever touch scope.reg. Drop the page once we enter the model runtime.
+      if (!(stack.page as { "~modelsScopedPage"?: boolean } | null)?.["~modelsScopedPage"]) {
+        stack.page = null;
+      }
+
       const isSamePrimedContext =
         stackMeta["~modelsPrimedModelId"] === context.current!.model["~id"] &&
         stackMeta["~modelsPrimedInstance"] === context.current!.instance;
@@ -525,7 +560,7 @@ function modifyRegion(node: Node) {
     );
   }
 
-  for (const link of node.family.links) {
+  for (const link of collectRegionNodes(node).slice(1)) {
     if ((link as any)["~reserved"]) {
       continue;
     }
@@ -562,9 +597,10 @@ export function modifyDeclarations<T>(fn: Fn<T>): { result: T; region: Node } {
 }
 
 export function bindRegionModel(region: Node, model: Model<any, any>): void {
-  const regionNodes = new Set<Node>([region, ...region.family.links]);
+  const regionTree = collectRegionNodes(region);
+  const regionNodes = new Set<Node>(regionTree);
 
-  for (const link of region.family.links) {
+  for (const link of regionTree.slice(1)) {
     if ((link as any)["~reserved"] || broadcastPatchedNodes.has(link)) {
       continue;
     }
@@ -615,12 +651,14 @@ export function bindRegionModel(region: Node, model: Model<any, any>): void {
                 target: link,
                 params: stack.value,
                 scope: stack.scope,
-              });
+                page: null as any,
+              } as any);
             } else {
               launch({
                 target: link,
                 params: stack.value,
-              });
+                page: null as any,
+              } as any);
             }
           }
 

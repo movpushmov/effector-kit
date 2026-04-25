@@ -66,6 +66,25 @@ function ChatScreen({ chatId }: { chatId: string }) {
 With `retain: true`, the hook does not delete the instance on unmount.
 This is useful when model lifetime should follow app state, not React mount cycles.
 
+`id` may be either the original instance id or any alias registered on the model.
+If an alias resolves to an existing instance, `useModel` returns that instance while preserving the requested id in the resolved entity.
+
+```tsx
+chatModel.addAlias({
+  aliasId: "route-chat-id",
+  instanceId: "server-chat-id",
+});
+
+function ChatScreen() {
+  const chat = useModel(chatModel, {
+    id: "route-chat-id",
+    retain: true,
+  });
+
+  return <div>{chat.title}</div>;
+}
+```
+
 ## 2. `useModel(model, lens)`
 
 Returns already existing instances selected by the lens.
@@ -99,6 +118,9 @@ function CurrentChat({ chatId }: { chatId: string }) {
   return <div>{chat.title}</div>;
 }
 ```
+
+Lens ids can also be aliases.
+This is useful when external sources, such as routes or websocket payloads, may use a temporary id while the model stores the canonical id.
 
 ## Advanced: `useModel(createdModel)`
 
