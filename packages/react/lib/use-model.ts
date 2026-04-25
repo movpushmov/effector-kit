@@ -5,6 +5,7 @@ import { useProvidedScope } from "effector-react";
 import {
   collectCreatedModelProxyUpdates,
   collectGraphUpdates,
+  createHandlePreviewInstance,
   createReactModelHandle,
   getCreatedModelHandle,
   isCreatedModel,
@@ -15,7 +16,10 @@ import {
   launchUnmountManagedModel,
   resolveLensEntity,
   resolveHandleEntity,
+  resolveHandleInstance,
+  resolveHandlePreviewEntity,
   resolveLensEntities,
+  syncManagedModelData,
 } from "./runtime";
 import type {
   CreatedModel,
@@ -23,6 +27,74 @@ import type {
   ReactModelHandle,
   UseModelOptions,
 } from "./types";
+
+type PreviewInstance = Record<string, unknown>;
+
+function arePreviewInstancesEqual(
+  left: PreviewInstance | null,
+  right: PreviewInstance | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => Object.is(left[key], right[key]));
+}
+
+function wrapPreviewEntity<T>(
+  value: T,
+  onHandlerCalled: () => void,
+  seen = new WeakMap<object, unknown>(),
+): T {
+  if (typeof value === "function") {
+    return ((...args: unknown[]) => {
+      const result = (value as (...args: unknown[]) => unknown)(...args);
+      onHandlerCalled();
+      return result;
+    }) as T;
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+
+  const cached = seen.get(value);
+
+  if (cached) {
+    return cached as T;
+  }
+
+  if (Array.isArray(value)) {
+    const next: unknown[] = [];
+    seen.set(value, next);
+
+    for (const item of value) {
+      next.push(wrapPreviewEntity(item, onHandlerCalled, seen));
+    }
+
+    return next as T;
+  }
+
+  const next: Record<string, unknown> = {};
+  seen.set(value, next);
+
+  for (const [key, item] of Object.entries(value)) {
+    next[key] = wrapPreviewEntity(item, onHandlerCalled, seen);
+  }
+
+  return next as T;
+}
 
 function scheduleMicrotask(callback: () => void): void {
   if (typeof queueMicrotask === "function") {
@@ -81,6 +153,179 @@ function subscribeToGraph(
     unsubscribeCreated();
     unsubscribeGraph();
   };
+}
+
+function useCommittedHandle<T extends Model<any, any>>({
+  handle,
+  mounted,
+  retain,
+  forceRerender,
+  requestRerender,
+  scope,
+}: {
+  handle: ReactModelHandle<T>;
+  mounted: Record<string, unknown>;
+  retain: boolean;
+  requestRerender: () => void;
+  forceRerender: () => void;
+  scope: Scope | undefined;
+}): ReactModelEntity<T> {
+  const mountedRef = useRef(false);
+  const suppressGraphUpdatesRef = useRef(false);
+  const previewInstanceRef = useRef<PreviewInstance | null>(null);
+  const previewBaselineRef = useRef<PreviewInstance | null>(null);
+  const stalePreviewInstanceRef = useRef<PreviewInstance | null>(null);
+  const previewChangedRef = useRef(false);
+  const previousHandleRef = useRef<{
+    id: string;
+    model: Model<any, any>;
+    scope: Scope | undefined;
+  } | null>(null);
+  const activeScope = handle.scope ?? scope;
+  const previousHandle = previousHandleRef.current;
+
+  if (
+    !previousHandle ||
+    previousHandle.id !== handle.id ||
+    previousHandle.model !== handle.model ||
+    previousHandle.scope !== activeScope
+  ) {
+    previousHandleRef.current = {
+      id: handle.id,
+      model: handle.model,
+      scope: activeScope,
+    };
+    mountedRef.current = false;
+    previewInstanceRef.current = null;
+    previewBaselineRef.current = null;
+    stalePreviewInstanceRef.current = null;
+    previewChangedRef.current = false;
+  }
+
+  const createPreviewEntity = (previewInstance: PreviewInstance) => {
+    const previewEntity = resolveHandlePreviewEntity(
+      handle,
+      activeScope,
+      previewInstance,
+    );
+
+    return wrapPreviewEntity(previewEntity, () => {
+      previewChangedRef.current = true;
+
+      if (mountedRef.current) {
+        syncManagedModelData(
+          { ...handle, scope: activeScope },
+          previewInstance,
+        );
+      }
+    });
+  };
+
+  const entity = (() => {
+    if (stalePreviewInstanceRef.current) {
+      return createPreviewEntity(stalePreviewInstanceRef.current);
+    }
+
+    const resolvedEntity = resolveHandleEntity(handle, activeScope);
+
+    if (resolvedEntity) {
+      return resolvedEntity;
+    }
+
+    if (!previewInstanceRef.current) {
+      previewInstanceRef.current = createHandlePreviewInstance(
+        handle,
+        activeScope,
+      );
+      previewBaselineRef.current = { ...previewInstanceRef.current };
+      previewChangedRef.current = false;
+    }
+
+    return createPreviewEntity(previewInstanceRef.current);
+  })();
+
+  useLayoutEffect(() => {
+    const scopedHandle = { ...handle, scope: activeScope };
+    const hasPreviewChanges =
+      previewChangedRef.current ||
+      !arePreviewInstancesEqual(
+        previewInstanceRef.current,
+        previewBaselineRef.current,
+      );
+    const subscribe = () =>
+      subscribeToGraph(
+        handle.model,
+        () => {
+          if (suppressGraphUpdatesRef.current) {
+            return;
+          }
+
+          if (stalePreviewInstanceRef.current && previewInstanceRef.current) {
+            const instance = resolveHandleInstance(scopedHandle, activeScope);
+
+            if (
+              instance &&
+              arePreviewInstancesEqual(instance, previewInstanceRef.current)
+            ) {
+              return;
+            }
+          }
+
+          stalePreviewInstanceRef.current = null;
+          requestRerender();
+        },
+        activeScope,
+      );
+
+    suppressGraphUpdatesRef.current = true;
+
+    let unsubscribe = () => {};
+
+    if (!hasPreviewChanges) {
+      unsubscribe = subscribe();
+    } else if (previewBaselineRef.current) {
+      stalePreviewInstanceRef.current = previewBaselineRef.current;
+    }
+
+    launchManagedModel(
+      scopedHandle,
+      mounted,
+      previewInstanceRef.current ?? undefined,
+    );
+    if (hasPreviewChanges) {
+      unsubscribe = subscribe();
+    }
+
+    const shouldForceRerender = !hasPreviewChanges;
+
+    mountedRef.current = true;
+    if (shouldForceRerender) {
+      previewInstanceRef.current = null;
+      previewBaselineRef.current = null;
+    }
+
+    suppressGraphUpdatesRef.current = false;
+    if (shouldForceRerender) {
+      forceRerender();
+    }
+
+    return () => {
+      unsubscribe();
+
+      if (!retain) {
+        launchUnmountManagedModel(scopedHandle);
+      }
+
+      mountedRef.current = false;
+      suppressGraphUpdatesRef.current = false;
+      previewInstanceRef.current = null;
+      previewBaselineRef.current = null;
+      stalePreviewInstanceRef.current = null;
+      previewChangedRef.current = false;
+    };
+  }, [activeScope, handle, retain]);
+
+  return entity;
 }
 
 export function useModel<T extends Model<any, any>>(
@@ -147,39 +392,15 @@ export function useModel<T extends Model<any, any>>(
       (lensOrOptions as { mounted?: Record<string, unknown> } | undefined)
         ?.mounted ?? {};
     const scope = handle.scope ?? providedScope;
-    const mountedRef = useRef(false);
-    const suppressGraphUpdatesRef = useRef(false);
 
-    if (!mountedRef.current) {
-      suppressGraphUpdatesRef.current = true;
-      launchManagedModel({ ...handle, scope }, mounted);
-      mountedRef.current = true;
-    }
-
-    useLayoutEffect(() => {
-      suppressGraphUpdatesRef.current = false;
+    return useCommittedHandle({
+      handle,
+      mounted,
+      forceRerender: rerender,
+      retain: false,
+      requestRerender,
+      scope,
     });
-
-    useLayoutEffect(() => {
-      const unsubscribe = subscribeToGraph(
-        handle.model,
-        () => {
-          if (suppressGraphUpdatesRef.current) {
-            return;
-          }
-
-          requestRerender();
-        },
-        scope,
-      );
-
-      return () => {
-        unsubscribe();
-        launchUnmountManagedModel({ ...handle, scope });
-      };
-    }, [handle, scope]);
-
-    return resolveHandleEntity(handle, scope)!;
   }
 
   if (isCreatedModel(input)) {
@@ -188,39 +409,15 @@ export function useModel<T extends Model<any, any>>(
       (lensOrOptions as { mounted?: Record<string, unknown> } | undefined)
         ?.mounted ?? {};
     const scope = handle.scope ?? providedScope;
-    const mountedRef = useRef(false);
-    const suppressGraphUpdatesRef = useRef(false);
 
-    if (!mountedRef.current) {
-      suppressGraphUpdatesRef.current = true;
-      launchManagedModel({ ...handle, scope }, mounted);
-      mountedRef.current = true;
-    }
-
-    useLayoutEffect(() => {
-      suppressGraphUpdatesRef.current = false;
+    return useCommittedHandle({
+      handle,
+      mounted,
+      forceRerender: rerender,
+      retain: false,
+      requestRerender,
+      scope,
     });
-
-    useLayoutEffect(() => {
-      const unsubscribe = subscribeToGraph(
-        handle.model,
-        () => {
-          if (suppressGraphUpdatesRef.current) {
-            return;
-          }
-
-          requestRerender();
-        },
-        scope,
-      );
-
-      return () => {
-        unsubscribe();
-        launchUnmountManagedModel({ ...handle, scope });
-      };
-    }, [handle, scope]);
-
-    return resolveHandleEntity(handle, scope)!;
   }
 
   if (isLens(lensOrOptions)) {
@@ -240,8 +437,6 @@ export function useModel<T extends Model<any, any>>(
 
   const options = (lensOrOptions ?? maybeOptions ?? {}) as UseModelOptions<T>;
   const handleRef = useRef<ReactModelHandle<T> | null>(null);
-  const mountedRef = useRef(false);
-  const suppressGraphUpdatesRef = useRef(false);
   const desiredScope = options.scope ?? providedScope;
 
   if (
@@ -259,39 +454,17 @@ export function useModel<T extends Model<any, any>>(
           : undefined;
 
     handleRef.current = createReactModelHandle(input, options.data, createOptions);
-    mountedRef.current = false;
   }
 
   const handle = handleRef.current!;
   const scope = handle.scope ?? providedScope;
 
-  if (!mountedRef.current) {
-    suppressGraphUpdatesRef.current = true;
-    launchManagedModel({ ...handle, scope }, options.mounted ?? {});
-    mountedRef.current = true;
-  }
-
-  useLayoutEffect(() => {
-    suppressGraphUpdatesRef.current = false;
+  return useCommittedHandle({
+    handle,
+    mounted: options.mounted ?? {},
+    forceRerender: rerender,
+    retain: Boolean(options.retain),
+    requestRerender,
+    scope,
   });
-
-  useLayoutEffect(() => {
-    const unsubscribe = subscribeToGraph(input, () => {
-      if (suppressGraphUpdatesRef.current) {
-        return;
-      }
-
-      requestRerender();
-    }, scope);
-
-    return () => {
-      unsubscribe();
-
-      if (!options.retain) {
-        launchUnmountManagedModel({ ...handle, scope });
-      }
-    };
-  }, [handle, input, options.retain, scope]);
-
-  return resolveHandleEntity(handle, scope)!;
 }

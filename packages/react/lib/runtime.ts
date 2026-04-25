@@ -1191,25 +1191,51 @@ export function resolveHandleEntity<T extends Model<any, any>>(
   return resolveEntity(handle.model, handle.id, instance, activeScope);
 }
 
+export function resolveHandleInstance<T extends Model<any, any>>(
+  handle: ReactModelHandle<T>,
+  scope?: Scope,
+): InstanceData | undefined {
+  const activeScope = handle.scope ?? scope;
+
+  return getModelInstance(handle.model, handle.id, activeScope);
+}
+
 export function resolveHandlePreviewEntity<T extends Model<any, any>>(
   handle: ReactModelHandle<T>,
   scope?: Scope,
+  previewInstance?: InstanceData,
 ): ReactModelEntity<T> {
   const activeScope = handle.scope ?? scope;
+  const instance =
+    getModelInstance(handle.model, handle.id, activeScope) ??
+    previewInstance ??
+    createHandlePreviewInstance(handle, activeScope);
+
+  return resolveEntity(handle.model, handle.id, instance, activeScope, false);
+}
+
+export function createHandlePreviewInstance<T extends Model<any, any>>(
+  handle: ReactModelHandle<T>,
+  scope?: Scope,
+): InstanceData {
+  const activeScope = handle.scope ?? scope;
+  const existing = getModelInstance(handle.model, handle.id, activeScope);
+
+  if (existing) {
+    return existing;
+  }
+
   const localStoreDefaults =
     (
       handle.model as T & {
         ["~localStoreDefaults"]?: InstanceData;
       }
     )["~localStoreDefaults"] ?? {};
-  const instance =
-    getModelInstance(handle.model, handle.id, activeScope) ??
-    collectPreviewInstanceData(handle.model["~api"], {
-      ...localStoreDefaults,
-      ...(createModelPayload(handle.model, handle).data as unknown as InstanceData),
-    });
 
-  return resolveEntity(handle.model, handle.id, instance, activeScope, false);
+  return collectPreviewInstanceData(handle.model["~api"], {
+    ...localStoreDefaults,
+    ...(createModelPayload(handle.model, handle).data as unknown as InstanceData),
+  });
 }
 
 export function getDefaultData<T extends Contract<any>>(contract: T) {
@@ -1497,8 +1523,15 @@ export function createModelPayload<T extends Model<any, any>>(
 export async function mountManagedModel<T extends Model<any, any>>(
   handle: ReactModelHandle<T>,
   mounted: MountedPayload = {},
+  data?: InstanceData,
 ): Promise<void> {
-  const payload = createModelPayload(handle.model, handle);
+  const payload = {
+    ...createModelPayload(handle.model, handle),
+    data: {
+      ...createModelPayload(handle.model, handle).data,
+      ...data,
+    } as ContractData<T["~contract"]>,
+  };
 
   await callUnit(handle.model.create, payload, handle.scope);
   const mountedUnit = handle.model["~api"]["$$mounted"];
@@ -1517,13 +1550,20 @@ export async function mountManagedModel<T extends Model<any, any>>(
 export function launchManagedModel<T extends Model<any, any>>(
   handle: ReactModelHandle<T>,
   mounted: MountedPayload = {},
+  data?: InstanceData,
 ): void {
   let instance = getModelInstance(handle.model, handle.id, handle.scope);
 
   if (!instance) {
     callUnitSync(
       handle.model.create,
-      createModelPayload(handle.model, handle),
+      {
+        ...createModelPayload(handle.model, handle),
+        data: {
+          ...createModelPayload(handle.model, handle).data,
+          ...data,
+        },
+      },
       handle.scope,
     );
     instance = getModelInstance(handle.model, handle.id, handle.scope);
@@ -1540,6 +1580,22 @@ export function launchManagedModel<T extends Model<any, any>>(
       handle.scope,
     );
   }
+}
+
+export function syncManagedModelData<T extends Model<any, any>>(
+  handle: ReactModelHandle<T>,
+  data: InstanceData,
+): void {
+  callUnitSync(
+    handle.model.create,
+    {
+      ...createModelPayload(handle.model, handle),
+      data: {
+        ...data,
+      },
+    },
+    handle.scope,
+  );
 }
 
 export async function unmountManagedModel<T extends Model<any, any>>(

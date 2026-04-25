@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from "react";
-import { useEffect } from "react";
+import { StrictMode, Suspense, useEffect, useReducer } from "react";
 import {
   cleanup,
   fireEvent,
@@ -254,6 +254,156 @@ describe("@effector-kit/react", () => {
     expect(scope.getState(counterModel.$instances)).toMatchObject({
       [id]: { count: 5 },
     });
+
+    view.unmount();
+
+    await waitFor(() => {
+      expect(scope.getState(counterModel.$instances)).toStrictEqual({});
+    });
+  });
+
+  test("useModel(model) [React strict mode] creates an instance on mount and removes it on unmount", async () => {
+    const counterModel = createCounterModel();
+    const scope = fork();
+
+    function FirstHarness() {
+      const entity = useModel(counterModel);
+
+      return (
+        <div>
+          <div data-testid="id-1">{entity.id}</div>
+          <div data-testid="count-1">{String(entity.count)}</div>
+          <button onClick={() => entity.onSetCount(5)} type="button">
+            set count 1
+          </button>
+        </div>
+      );
+    }
+
+    function SecondHarness() {
+      const entity = useModel(counterModel);
+
+      return (
+        <div>
+          <div data-testid="id-2">{entity.id}</div>
+          <div data-testid="count-2">{String(entity.count)}</div>
+          <button onClick={() => entity.onSetCount(10)} type="button">
+            set count 2
+          </button>
+        </div>
+      );
+    }
+
+    function Ui() {
+      const [show, toggle] = useReducer((value) => !value, false);
+
+      return (
+        <div>
+          <button data-testid="btn" onClick={() => toggle()} type="button">
+            Toggle
+          </button>
+          <FirstHarness />
+          {show && <SecondHarness />}
+        </div>
+      );
+    }
+
+    const view = renderInScope(
+      scope,
+      <StrictMode>
+        <Ui />
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("count-1").textContent).toBe("0");
+    });
+
+    const id1 = screen.getByTestId("id-1").textContent!;
+
+    expect(scope.getState(counterModel.$instances)).toMatchObject({
+      [id1]: { count: 0 },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set count 1" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("count-1").textContent).toBe("5");
+    });
+
+    expect(scope.getState(counterModel.$instances)).toMatchObject({
+      [id1]: { count: 5 },
+    });
+
+    fireEvent.click(screen.getByTestId("btn"));
+
+    const id2 = screen.getByTestId("id-2").textContent!;
+
+    fireEvent.click(screen.getByRole("button", { name: "set count 2" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("count-2").textContent).toBe("10");
+    });
+
+    expect(scope.getState(counterModel.$instances)).toMatchObject({
+      [id1]: { count: 5 },
+      [id2]: { count: 10 },
+    });
+
+    fireEvent.click(screen.getByTestId("btn"));
+
+    expect(scope.getState(counterModel.$instances)).toMatchObject({
+      [id1]: { count: 5 },
+    });
+
+    view.unmount();
+
+    await waitFor(() => {
+      expect(scope.getState(counterModel.$instances)).toStrictEqual({});
+    });
+  });
+
+  test("useModel(model) does not create an instance for a suspended render before commit", async () => {
+    const counterModel = createCounterModel();
+    const scope = fork();
+    let shouldSuspend = true;
+    const pending = new Promise<void>(() => {});
+
+    function Harness() {
+      const entity = useModel(counterModel);
+
+      if (shouldSuspend) {
+        throw pending;
+      }
+
+      return <div data-testid="suspense-id">{entity.id}</div>;
+    }
+
+    const view = renderInScope(
+      scope,
+      <Suspense fallback={<div data-testid="fallback">loading</div>}>
+        <Harness />
+      </Suspense>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("fallback").textContent).toBe("loading");
+    });
+
+    expect(scope.getState(counterModel.$instances)).toStrictEqual({});
+
+    shouldSuspend = false;
+    view.rerender(
+      <Suspense fallback={<div data-testid="fallback">loading</div>}>
+        <Harness />
+      </Suspense>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("suspense-id").textContent).toBeTruthy();
+    });
+
+    expect(Object.keys(scope.getState(counterModel.$instances))).toHaveLength(1);
 
     view.unmount();
 
