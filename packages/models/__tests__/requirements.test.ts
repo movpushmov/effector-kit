@@ -1,4 +1,4 @@
-import { describe, test, expect, expectTypeOf, vi } from "vitest";
+import { describe, test, expect, expectTypeOf, vi } from 'vitest';
 import {
   child,
   contract,
@@ -7,14 +7,14 @@ import {
   ref,
   union,
   withInstanceContext,
-} from "../lib";
-import { lens } from "../lib/lens";
+} from '../lib';
+import { lens } from '../lib/lens';
 import {
   type TBoolean,
   type TNumber,
   type TString,
   type TStatic,
-} from "../lib/type-schema";
+} from '../lib/type-schema';
 import {
   allSettled,
   combine,
@@ -23,7 +23,7 @@ import {
   fork,
   sample,
   type EventCallable,
-} from "effector";
+} from 'effector';
 
 async function createInstances(
   scope: ReturnType<typeof fork>,
@@ -35,7 +35,7 @@ async function createInstances(
 
 const todoList = model({
   contract: contract({
-    title: define.store(define.schema<TString>(), ""),
+    title: define.store(define.schema<TString>(), ''),
     done: define.store(define.schema<TBoolean>(), false),
     changeDone: define.event(define.schema<TBoolean>()),
   })(),
@@ -69,7 +69,7 @@ const counterModel = model({
     sample({
       clock: increment,
       source: count,
-      fn: (value) => value + 1,
+      fn: value => value + 1,
       target: count,
     });
 
@@ -122,7 +122,7 @@ const itemModel = model({
 function createDashboardModel() {
   return model({
     contract: contract({
-      name: define.store(define.schema<TString>(), ""),
+      name: define.store(define.schema<TString>(), ''),
     })(),
     fn: ({ name }) => {
       const selected = ref(counterModel);
@@ -167,7 +167,7 @@ function createDashboardModel() {
 function createDashboardUnionModel() {
   return model({
     contract: contract({
-      name: define.store(define.schema<TString>(), ""),
+      name: define.store(define.schema<TString>(), ''),
     })(),
     fn: ({ name }) => {
       const selected = ref(
@@ -210,47 +210,45 @@ function createDashboardUnionModel() {
       sample({
         clock: setSelectedValue,
         target: selected.lens.match({
-          counter: (sub) => sub.count.target(),
-          flagged: (sub) => sub.score.target(),
+          counter: sub => sub.count.target(),
+          flagged: sub => sub.score.target(),
         }),
       });
 
       sample({
         clock: setCounterOnly,
-        target: selected.lens.only("counter").counter.count.target(),
+        target: selected.lens.only('counter').counter.count.target(),
       });
 
       sample({
         clock: deleteSelected,
         target: selected.lens.match({
-          counter: (sub) => sub.delete(),
-          flagged: (sub) => sub.delete(),
+          counter: sub => sub.delete(),
+          flagged: sub => sub.delete(),
         }),
       });
 
       sample({
         clock: setFirstSelectedValue,
         target: selected.lens.first().match({
-          counter: (sub) => sub.count.target(),
-          flagged: (sub) => sub.score.target(),
+          counter: sub => sub.count.target(),
+          flagged: sub => sub.score.target(),
         }),
       });
 
       sample({
         clock: setLastSelectedValue,
         target: selected.lens.last().match({
-          counter: (sub) => sub.count.target(),
-          flagged: (sub) => sub.score.target(),
+          counter: sub => sub.count.target(),
+          flagged: sub => sub.score.target(),
         }),
       });
 
       sample({
         clock: setWithIsolatedMatch,
         target: selected.lens.match({
-          counter: (sub) =>
-            sub.where((entity) => entity.count < 0).count.target(),
-          flagged: (sub) =>
-            sub.where((entity) => entity.score >= 0).score.target(),
+          counter: sub => sub.where(entity => entity.count < 0).count.target(),
+          flagged: sub => sub.where(entity => entity.score >= 0).score.target(),
         }),
       });
 
@@ -260,24 +258,24 @@ function createDashboardUnionModel() {
           .where(
             (entity, _, ctx) =>
               ctx?.match({
-                counter: (counter) => counter.count > 0,
-                flagged: (flagged) => flagged.score > 0,
+                counter: counter => counter.count > 0,
+                flagged: flagged => flagged.score > 0,
               }) ?? false,
           )
           .match({
-            counter: (sub) => sub.count.target(),
-            flagged: (sub) => sub.score.target(),
+            counter: sub => sub.count.target(),
+            flagged: sub => sub.score.target(),
           }),
       });
 
       sample({
         clock: setByUniqueId,
         target: selected.lens
-          .only("counter")
+          .only('counter')
           .where(
             (entity, _, ctx) =>
-              ctx?.uniqueId("counter", entity.id) ===
-              `${counterModel["~id"]}:a`,
+              ctx?.uniqueId('counter', entity.id) ===
+              `${counterModel['~id']}:a`,
           )
           .counter.count.target(),
       });
@@ -304,7 +302,7 @@ function createDashboardUnionModel() {
 function createListModel() {
   return model({
     contract: contract({
-      title: define.store(define.schema<TString>(), ""),
+      title: define.store(define.schema<TString>(), ''),
     })(),
     fn: ({ title }) => {
       const items = child(itemModel);
@@ -342,18 +340,18 @@ function createListModel() {
 function getChildInstancesByParent(
   scope: ReturnType<typeof fork>,
   parentModel: { $instances: { getState(): Record<string, any> } },
-  childModel: { ["~id"]: string },
+  childModel: { ['~id']: string },
   parentId: string,
 ) {
   const parentInstances = scope.getState(
     parentModel.$instances as any,
   ) as Record<string, any>;
 
-  return parentInstances[parentId]?.["~children"]?.[childModel["~id"]] ?? {};
+  return parentInstances[parentId]?.['~children']?.[childModel['~id']] ?? {};
 }
 
-describe("models api", () => {
-  test("contract events keep concrete payload types in model fn", () => {
+describe('models api', () => {
+  test('contract events keep concrete payload types in model fn', () => {
     const chatInfoModel = model({
       contract: contract({
         mounted: define.event(define.schema<TStatic<{ id: string }>>()),
@@ -368,12 +366,12 @@ describe("models api", () => {
     expect(chatInfoModel).toBeDefined();
   });
 
-  test("model can call external units with correct instance-scoped source data", async () => {
+  test('model can call external units with correct instance-scoped source data', async () => {
     const externalReported = createEvent<{ count: number; label: string }>();
     const $externalSnapshot = createStore<string | null>(null);
     const seen: Array<{ count: number; label: string }> = [];
 
-    externalReported.watch((payload) => {
+    externalReported.watch(payload => {
       seen.push(payload);
     });
 
@@ -410,24 +408,24 @@ describe("models api", () => {
     await allSettled(reportModel.create, {
       scope,
       params: [
-        { id: "a", data: { count: 1 } },
-        { id: "b", data: { count: 2 } },
+        { id: 'a', data: { count: 1 } },
+        { id: 'b', data: { count: 2 } },
       ],
     });
 
     await allSettled(
-      reportModel.lens.where((entity) => entity.id === "b").report.target(),
+      reportModel.lens.where(entity => entity.id === 'b').report.target(),
       {
         scope,
-        params: "selected",
+        params: 'selected',
       },
     );
 
-    expect(seen).toStrictEqual([{ count: 2, label: "selected" }]);
-    expect(scope.getState($externalSnapshot)).toBe("selected:2");
+    expect(seen).toStrictEqual([{ count: 2, label: 'selected' }]);
+    expect(scope.getState($externalSnapshot)).toBe('selected:2');
   });
 
-  test("subscription to external unit applies to all model instances", async () => {
+  test('subscription to external unit applies to all model instances', async () => {
     const incrementAll = createEvent<number>();
 
     const syncedCounterModel = model({
@@ -453,9 +451,9 @@ describe("models api", () => {
     await allSettled(syncedCounterModel.create, {
       scope,
       params: [
-        { id: "a", data: { count: 1 } },
-        { id: "b", data: { count: 5 } },
-        { id: "c", data: { count: 10 } },
+        { id: 'a', data: { count: 1 } },
+        { id: 'b', data: { count: 5 } },
+        { id: 'c', data: { count: 10 } },
       ],
     });
 
@@ -471,11 +469,11 @@ describe("models api", () => {
     });
   });
 
-  test("derived stores recompute inside model instances without ui", async () => {
+  test('derived stores recompute inside model instances without ui', async () => {
     const profileModel = model({
       contract: contract({
-        firstName: define.store(define.schema<TString>(), ""),
-        lastName: define.store(define.schema<TString>(), ""),
+        firstName: define.store(define.schema<TString>(), ''),
+        lastName: define.store(define.schema<TString>(), ''),
       })(),
       fn: ({ firstName, lastName }) => {
         const firstNameChanged = createEvent<string>();
@@ -483,7 +481,7 @@ describe("models api", () => {
         const $fullName = combine(firstName, lastName, (first, last) =>
           `${first} ${last}`.trim(),
         );
-        const $fullNameUpper = $fullName.map((value) => value.toUpperCase());
+        const $fullNameUpper = $fullName.map(value => value.toUpperCase());
 
         sample({
           clock: firstNameChanged,
@@ -510,53 +508,53 @@ describe("models api", () => {
 
     await createInstances(scope, profileModel.create, [
       {
-        id: "profile-1",
-        data: { firstName: "Ada", lastName: "Lovelace" },
+        id: 'profile-1',
+        data: { firstName: 'Ada', lastName: 'Lovelace' },
       },
     ]);
 
     const readInstance = () => {
-      const instance = scope.getState(profileModel.$instances)["profile-1"];
+      const instance = scope.getState(profileModel.$instances)['profile-1'];
 
       if (!instance) {
-        throw new Error("profile-1 instance is missing");
+        throw new Error('profile-1 instance is missing');
       }
 
       return withInstanceContext(profileModel, instance, () => ({
-        fullName: profileModel["~api"].$fullName.getState(),
-        fullNameUpper: profileModel["~api"].$fullNameUpper.getState(),
+        fullName: profileModel['~api'].$fullName.getState(),
+        fullNameUpper: profileModel['~api'].$fullNameUpper.getState(),
       }));
     };
 
     expect(readInstance()).toStrictEqual({
-      fullName: "Ada Lovelace",
-      fullNameUpper: "ADA LOVELACE",
+      fullName: 'Ada Lovelace',
+      fullNameUpper: 'ADA LOVELACE',
     });
 
     await allSettled(
       profileModel.lens
-        .where((entity) => entity.id === "profile-1")
+        .where(entity => entity.id === 'profile-1')
         .firstNameChanged.target(),
       {
         scope,
-        params: "Grace",
+        params: 'Grace',
       },
     );
 
     expect(readInstance()).toStrictEqual({
-      fullName: "Grace Lovelace",
-      fullNameUpper: "GRACE LOVELACE",
+      fullName: 'Grace Lovelace',
+      fullNameUpper: 'GRACE LOVELACE',
     });
   });
 
-  test("derived store watch receives updated value inside model instance", async () => {
+  test('derived store watch receives updated value inside model instance', async () => {
     const scope = fork();
     const watcher = vi.fn();
 
     const profileModel = model({
       contract: contract({
-        firstName: define.store(define.schema<TString>(), ""),
-        lastName: define.store(define.schema<TString>(), ""),
+        firstName: define.store(define.schema<TString>(), ''),
+        lastName: define.store(define.schema<TString>(), ''),
       })(),
       fn: ({ firstName, lastName }) => {
         const firstNameChanged = createEvent<string>();
@@ -584,8 +582,8 @@ describe("models api", () => {
 
     await createInstances(scope, profileModel.create, [
       {
-        id: "profile-1",
-        data: { firstName: "Ada", lastName: "Lovelace" },
+        id: 'profile-1',
+        data: { firstName: 'Ada', lastName: 'Lovelace' },
       },
     ]);
 
@@ -593,24 +591,24 @@ describe("models api", () => {
 
     await allSettled(
       profileModel.lens
-        .where((entity) => entity.id === "profile-1")
+        .where(entity => entity.id === 'profile-1')
         .firstNameChanged.target(),
       {
         scope,
-        params: "Grace",
+        params: 'Grace',
       },
     );
 
     expect(watcher).toHaveBeenCalled();
-    expect(watcher.mock.calls.at(-1)).toStrictEqual(["Grace Lovelace"]);
+    expect(watcher.mock.calls.at(-1)).toStrictEqual(['Grace Lovelace']);
   });
 
-  test("derived store updates trigger downstream graph inside model instances", async () => {
+  test('derived store updates trigger downstream graph inside model instances', async () => {
     const profileModel = model({
       contract: contract({
-        firstName: define.store(define.schema<TString>(), ""),
-        lastName: define.store(define.schema<TString>(), ""),
-        lastDerivedValue: define.store(define.schema<TString>(), ""),
+        firstName: define.store(define.schema<TString>(), ''),
+        lastName: define.store(define.schema<TString>(), ''),
+        lastDerivedValue: define.store(define.schema<TString>(), ''),
       })(),
       fn: ({ firstName, lastName, lastDerivedValue }) => {
         const firstNameChanged = createEvent<string>();
@@ -649,58 +647,58 @@ describe("models api", () => {
 
     await createInstances(scope, profileModel.create, [
       {
-        id: "profile-1",
-        data: { firstName: "Ada", lastName: "Lovelace" },
+        id: 'profile-1',
+        data: { firstName: 'Ada', lastName: 'Lovelace' },
       },
     ]);
 
     await allSettled(
       profileModel.lens
-        .where((entity) => entity.id === "profile-1")
+        .where(entity => entity.id === 'profile-1')
         .firstNameChanged.target(),
       {
         scope,
-        params: "Grace",
+        params: 'Grace',
       },
     );
 
-    const instance = scope.getState(profileModel.$instances)["profile-1"];
+    const instance = scope.getState(profileModel.$instances)['profile-1'];
 
     expect(instance).toBeDefined();
-    expect(instance!.lastDerivedValue).toBe("Grace Lovelace");
+    expect(instance!.lastDerivedValue).toBe('Grace Lovelace');
 
     const values = withInstanceContext(
       profileModel,
       instance!,
       () => ({
-        fullName: profileModel["~api"].$fullName.getState(),
-        lastDerivedValue: profileModel["~api"].lastDerivedValue.getState(),
+        fullName: profileModel['~api'].$fullName.getState(),
+        lastDerivedValue: profileModel['~api'].lastDerivedValue.getState(),
       }),
       scope,
     );
 
     expect(values).toStrictEqual({
-      fullName: "Grace Lovelace",
-      lastDerivedValue: "Grace Lovelace",
+      fullName: 'Grace Lovelace',
+      lastDerivedValue: 'Grace Lovelace',
     });
   });
 
-  test("nested factory stores propagate derived updates inside model instances", async () => {
+  test('nested factory stores propagate derived updates inside model instances', async () => {
     function createHeaderModel() {
       const $chat = createStore<{ name: string } | null>(null);
       const $typingUsers = createStore<string[]>([]);
       const chatChanged = createEvent<{ name: string } | null>();
       const typingUsersChanged = createEvent<string[]>();
-      const $chatName = $chat.map((chat) => chat?.name ?? "");
+      const $chatName = $chat.map(chat => chat?.name ?? '');
       const $chatSubtitle = combine(
         $chat,
         $typingUsers,
         (chat, typingUsers) => {
           if (!chat) {
-            return "";
+            return '';
           }
 
-          return typingUsers.length > 0 ? "typing..." : chat.name;
+          return typingUsers.length > 0 ? 'typing...' : chat.name;
         },
       );
 
@@ -726,7 +724,7 @@ describe("models api", () => {
 
     const screenModel = model({
       contract: contract({
-        lastHeaderTitle: define.store(define.schema<TString>(), ""),
+        lastHeaderTitle: define.store(define.schema<TString>(), ''),
       })(),
       fn: ({ lastHeaderTitle }) => {
         const header = createHeaderModel();
@@ -747,50 +745,50 @@ describe("models api", () => {
 
     await createInstances(scope, screenModel.create, [
       {
-        id: "screen-1",
-        data: { lastHeaderTitle: "" },
+        id: 'screen-1',
+        data: { lastHeaderTitle: '' },
       },
     ]);
 
     await allSettled(
       screenModel.lens
-        .where((entity) => entity.id === "screen-1")
+        .where(entity => entity.id === 'screen-1')
         .header.chatChanged.target(),
       {
         scope,
-        params: { name: "General" },
+        params: { name: 'General' },
       },
     );
 
-    const instance = scope.getState(screenModel.$instances)["screen-1"];
+    const instance = scope.getState(screenModel.$instances)['screen-1'];
 
     expect(instance).toBeDefined();
-    expect(instance!["lastHeaderTitle"]).toBe("General");
+    expect(instance!['lastHeaderTitle']).toBe('General');
 
     const values = withInstanceContext(
       screenModel,
       instance!,
       () => ({
-        chatName: screenModel["~api"].header.$chatName.getState(),
-        chatSubtitle: screenModel["~api"].header.$chatSubtitle.getState(),
-        lastHeaderTitle: screenModel["~api"].lastHeaderTitle.getState(),
+        chatName: screenModel['~api'].header.$chatName.getState(),
+        chatSubtitle: screenModel['~api'].header.$chatSubtitle.getState(),
+        lastHeaderTitle: screenModel['~api'].lastHeaderTitle.getState(),
       }),
       scope,
     );
 
     expect(values).toStrictEqual({
-      chatName: "General",
-      chatSubtitle: "General",
-      lastHeaderTitle: "General",
+      chatName: 'General',
+      chatSubtitle: 'General',
+      lastHeaderTitle: 'General',
     });
 
     await allSettled(
       screenModel.lens
-        .where((entity) => entity.id === "screen-1")
+        .where(entity => entity.id === 'screen-1')
         .header.typingUsersChanged.target(),
       {
         scope,
-        params: ["u1"],
+        params: ['u1'],
       },
     );
 
@@ -798,213 +796,213 @@ describe("models api", () => {
       screenModel,
       instance!,
       () => ({
-        chatSubtitle: screenModel["~api"].header.$chatSubtitle.getState(),
-        lastHeaderTitle: screenModel["~api"].lastHeaderTitle.getState(),
+        chatSubtitle: screenModel['~api'].header.$chatSubtitle.getState(),
+        lastHeaderTitle: screenModel['~api'].lastHeaderTitle.getState(),
       }),
       scope,
     );
 
     expect(nextValues).toStrictEqual({
-      chatSubtitle: "typing...",
-      lastHeaderTitle: "General",
+      chatSubtitle: 'typing...',
+      lastHeaderTitle: 'General',
     });
   });
 
-  describe("instances", () => {
-    test("create instance", async () => {
+  describe('instances', () => {
+    test('create instance', async () => {
       const scope = fork();
 
       await allSettled(todoList.create, {
         scope,
-        params: { id: "a", data: { title: "Todo #1", done: false } },
+        params: { id: 'a', data: { title: 'Todo #1', done: false } },
       });
 
       await allSettled(todoList.create, {
         scope,
-        params: { id: "b", data: { title: "Todo #2", done: true } },
+        params: { id: 'b', data: { title: 'Todo #2', done: true } },
       });
 
       await allSettled(todoList.create, {
         scope,
-        params: { id: "c", data: { title: "Todo #3", done: false } },
+        params: { id: 'c', data: { title: 'Todo #3', done: false } },
       });
 
       expect(scope.getState(todoList.$instances)).toStrictEqual({
-        a: { title: "Todo #1", done: false },
-        b: { title: "Todo #2", done: true },
-        c: { title: "Todo #3", done: false },
+        a: { title: 'Todo #1', done: false },
+        b: { title: 'Todo #2', done: true },
+        c: { title: 'Todo #3', done: false },
       });
     });
 
-    test("remove instance", async () => {
+    test('remove instance', async () => {
       const scope = fork();
 
       await createInstances(scope, todoList.create, [
-        { id: "a", data: { title: "Todo #1", done: false } },
-        { id: "b", data: { title: "Todo #2", done: true } },
-        { id: "c", data: { title: "Todo #3", done: false } },
+        { id: 'a', data: { title: 'Todo #1', done: false } },
+        { id: 'b', data: { title: 'Todo #2', done: true } },
+        { id: 'c', data: { title: 'Todo #3', done: false } },
       ]);
 
-      await allSettled(todoList.lens.where((e) => e.id === "a").delete(), {
+      await allSettled(todoList.lens.where(e => e.id === 'a').delete(), {
         scope,
       });
 
       expect(scope.getState(todoList.$instances)).toStrictEqual({
-        b: { title: "Todo #2", done: true },
-        c: { title: "Todo #3", done: false },
+        b: { title: 'Todo #2', done: true },
+        c: { title: 'Todo #3', done: false },
       });
     });
 
-    test("mass removing instances", async () => {
+    test('mass removing instances', async () => {
       const scope = fork();
 
       await createInstances(scope, todoList.create, [
-        { id: "a", data: { title: "Todo #1", done: false } },
-        { id: "b", data: { title: "Todo #2", done: true } },
-        { id: "c", data: { title: "Todo #3", done: false } },
+        { id: 'a', data: { title: 'Todo #1', done: false } },
+        { id: 'b', data: { title: 'Todo #2', done: true } },
+        { id: 'c', data: { title: 'Todo #3', done: false } },
       ]);
 
       await allSettled(
-        todoList.lens.where((e) => e.id === "a" || e.id === "b").delete(),
+        todoList.lens.where(e => e.id === 'a' || e.id === 'b').delete(),
         {
           scope,
         },
       );
 
       expect(scope.getState(todoList.$instances)).toStrictEqual({
-        c: { title: "Todo #3", done: false },
+        c: { title: 'Todo #3', done: false },
       });
     });
 
-    test("create several instances with one batch create call", async () => {
+    test('create several instances with one batch create call', async () => {
       const scope = fork();
 
       await createInstances(scope, todoList.create, [
-        { id: "a", data: { title: "Todo #1", done: false } },
-        { id: "b", data: { title: "Todo #2", done: true } },
-        { id: "c", data: { title: "Todo #3", done: false } },
+        { id: 'a', data: { title: 'Todo #1', done: false } },
+        { id: 'b', data: { title: 'Todo #2', done: true } },
+        { id: 'c', data: { title: 'Todo #3', done: false } },
       ]);
 
       expect(scope.getState(todoList.$instances)).toStrictEqual({
-        a: { title: "Todo #1", done: false },
-        b: { title: "Todo #2", done: true },
-        c: { title: "Todo #3", done: false },
+        a: { title: 'Todo #1', done: false },
+        b: { title: 'Todo #2', done: true },
+        c: { title: 'Todo #3', done: false },
       });
     });
 
-    test("delete several instances with one delete call", async () => {
+    test('delete several instances with one delete call', async () => {
       const scope = fork();
 
       await createInstances(scope, todoList.create, [
-        { id: "a", data: { title: "Todo #1", done: false } },
-        { id: "b", data: { title: "Todo #2", done: true } },
-        { id: "c", data: { title: "Todo #3", done: false } },
+        { id: 'a', data: { title: 'Todo #1', done: false } },
+        { id: 'b', data: { title: 'Todo #2', done: true } },
+        { id: 'c', data: { title: 'Todo #3', done: false } },
       ]);
 
       await allSettled(todoList.delete, {
         scope,
-        params: ["a", "c"],
+        params: ['a', 'c'],
       });
 
       expect(scope.getState(todoList.$instances)).toStrictEqual({
-        b: { title: "Todo #2", done: true },
+        b: { title: 'Todo #2', done: true },
       });
     });
 
-    test("adds and removes aliases for existing instances", async () => {
+    test('adds and removes aliases for existing instances', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a1", data: { count: 1 } },
+        { id: 'a1', data: { count: 1 } },
       ]);
 
       await allSettled(counterModel.addAlias, {
         scope,
-        params: { aliasId: "a2", instanceId: "a1" },
+        params: { aliasId: 'a2', instanceId: 'a1' },
       });
 
       expect(scope.getState(counterModel.$aliases)).toStrictEqual({
-        a2: "a1",
+        a2: 'a1',
       });
 
       await allSettled(counterModel.removeAlias, {
         scope,
-        params: "a2",
+        params: 'a2',
       });
 
       expect(scope.getState(counterModel.$aliases)).toStrictEqual({});
     });
 
-    test("cleans aliases when original instance is deleted", async () => {
+    test('cleans aliases when original instance is deleted', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a1", data: { count: 1 } },
-        { id: "b1", data: { count: 2 } },
+        { id: 'a1', data: { count: 1 } },
+        { id: 'b1', data: { count: 2 } },
       ]);
 
       await allSettled(counterModel.addAlias, {
         scope,
-        params: { aliasId: "a2", instanceId: "a1" },
+        params: { aliasId: 'a2', instanceId: 'a1' },
       });
 
       await allSettled(counterModel.addAlias, {
         scope,
-        params: { aliasId: "b2", instanceId: "b1" },
+        params: { aliasId: 'b2', instanceId: 'b1' },
       });
 
       await allSettled(counterModel.delete, {
         scope,
-        params: "a1",
+        params: 'a1',
       });
 
       expect(scope.getState(counterModel.$instances)).toStrictEqual({
         b1: { count: 2 },
       });
       expect(scope.getState(counterModel.$aliases)).toStrictEqual({
-        b2: "b1",
+        b2: 'b1',
       });
     });
 
-    test("deletes original instance when deletion is requested by alias", async () => {
+    test('deletes original instance when deletion is requested by alias', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a1", data: { count: 1 } },
+        { id: 'a1', data: { count: 1 } },
       ]);
 
       await allSettled(counterModel.addAlias, {
         scope,
-        params: { aliasId: "a2", instanceId: "a1" },
+        params: { aliasId: 'a2', instanceId: 'a1' },
       });
 
       await allSettled(counterModel.delete, {
         scope,
-        params: "a2",
+        params: 'a2',
       });
 
       expect(scope.getState(counterModel.$instances)).toStrictEqual({});
       expect(scope.getState(counterModel.$aliases)).toStrictEqual({});
     });
 
-    test("creating an instance with an existing alias id removes that alias", async () => {
+    test('creating an instance with an existing alias id removes that alias', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a1", data: { count: 1 } },
+        { id: 'a1', data: { count: 1 } },
       ]);
 
       await allSettled(counterModel.addAlias, {
         scope,
-        params: { aliasId: "a2", instanceId: "a1" },
+        params: { aliasId: 'a2', instanceId: 'a1' },
       });
 
       await allSettled(counterModel.create, {
         scope,
-        params: { id: "a2", data: { count: 2 } },
+        params: { id: 'a2', data: { count: 2 } },
       });
 
-      await allSettled(counterModel.lens.ids("a2").setCount.target(), {
+      await allSettled(counterModel.lens.ids('a2').setCount.target(), {
         scope,
         params: 3,
       });
@@ -1017,34 +1015,32 @@ describe("models api", () => {
     });
   });
 
-  describe("ref", () => {
-    test("add instance", async () => {
+  describe('ref', () => {
+    test('add instance', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a", data: { count: 1 } },
-        { id: "b", data: { count: 2 } },
+        { id: 'a', data: { count: 1 } },
+        { id: 'b', data: { count: 2 } },
       ]);
 
       const dashboardModel = createDashboardModel();
 
       await createInstances(scope, dashboardModel.create, [
-        { id: "d1", data: { name: "Dashboard #1" } },
+        { id: 'd1', data: { name: 'Dashboard #1' } },
       ]);
 
       await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d1")
-          .track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d1")
+          .where(entity => entity.id === 'd1')
           .setSelectedCount.target(),
         {
           scope,
@@ -1058,42 +1054,40 @@ describe("models api", () => {
       });
     });
 
-    test("remove instance", async () => {
+    test('remove instance', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a", data: { count: 1 } },
+        { id: 'a', data: { count: 1 } },
       ]);
 
       const dashboardModel = createDashboardModel();
 
       await createInstances(scope, dashboardModel.create, [
-        { id: "d1", data: { name: "Dashboard #1" } },
+        { id: 'd1', data: { name: 'Dashboard #1' } },
       ]);
 
       await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d1")
-          .track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d1")
+          .where(entity => entity.id === 'd1')
           .untrack.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d1")
+          .where(entity => entity.id === 'd1')
           .setSelectedCount.target(),
         {
           scope,
@@ -1106,44 +1100,40 @@ describe("models api", () => {
       });
     });
 
-    test("updates only instances tracked by the current parent", async () => {
+    test('updates only instances tracked by the current parent', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a", data: { count: 1 } },
-        { id: "b", data: { count: 2 } },
-        { id: "c", data: { count: 3 } },
+        { id: 'a', data: { count: 1 } },
+        { id: 'b', data: { count: 2 } },
+        { id: 'c', data: { count: 3 } },
       ]);
 
       const dashboardModel = createDashboardModel();
 
       await createInstances(scope, dashboardModel.create, [
-        { id: "d1", data: { name: "Dashboard #1" } },
+        { id: 'd1', data: { name: 'Dashboard #1' } },
       ]);
 
       await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d1")
-          .track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
+        },
+      );
+
+      await allSettled(
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
+        {
+          scope,
+          params: 'c',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d1")
-          .track.target(),
-        {
-          scope,
-          params: "c",
-        },
-      );
-
-      await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d1")
+          .where(entity => entity.id === 'd1')
           .setSelectedCount.target(),
         {
           scope,
@@ -1158,53 +1148,49 @@ describe("models api", () => {
       });
     });
 
-    test("stops updating an instance after it is removed from tracked ids", async () => {
+    test('stops updating an instance after it is removed from tracked ids', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a", data: { count: 1 } },
-        { id: "b", data: { count: 2 } },
+        { id: 'a', data: { count: 1 } },
+        { id: 'b', data: { count: 2 } },
       ]);
 
       const dashboardModel = createDashboardModel();
 
       await createInstances(scope, dashboardModel.create, [
-        { id: "d1", data: { name: "Dashboard #1" } },
+        { id: 'd1', data: { name: 'Dashboard #1' } },
       ]);
 
       await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d1")
-          .track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
+        },
+      );
+
+      await allSettled(
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
+        {
+          scope,
+          params: 'b',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d1")
-          .track.target(),
-        {
-          scope,
-          params: "b",
-        },
-      );
-
-      await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d1")
+          .where(entity => entity.id === 'd1')
           .untrack.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d1")
+          .where(entity => entity.id === 'd1')
           .setSelectedCount.target(),
         {
           scope,
@@ -1218,44 +1204,40 @@ describe("models api", () => {
       });
     });
 
-    test("tracks ids independently for different parent instances", async () => {
+    test('tracks ids independently for different parent instances', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a", data: { count: 1 } },
-        { id: "b", data: { count: 2 } },
+        { id: 'a', data: { count: 1 } },
+        { id: 'b', data: { count: 2 } },
       ]);
 
       const dashboardModel = createDashboardModel();
 
       await createInstances(scope, dashboardModel.create, [
-        { id: "d1", data: { name: "Dashboard #1" } },
-        { id: "d2", data: { name: "Dashboard #2" } },
+        { id: 'd1', data: { name: 'Dashboard #1' } },
+        { id: 'd2', data: { name: 'Dashboard #2' } },
       ]);
 
       await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d1")
-          .track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
+        },
+      );
+
+      await allSettled(
+        dashboardModel.lens.where(entity => entity.id === 'd2').track.target(),
+        {
+          scope,
+          params: 'b',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d2")
-          .track.target(),
-        {
-          scope,
-          params: "b",
-        },
-      );
-
-      await allSettled(
-        dashboardModel.lens
-          .where((entity) => entity.id === "d2")
+          .where(entity => entity.id === 'd2')
           .setSelectedCount.target(),
         {
           scope,
@@ -1269,47 +1251,47 @@ describe("models api", () => {
       });
     });
 
-    test("does not duplicate tracked ref ids when tracking the same id repeatedly", async () => {
+    test('does not duplicate tracked ref ids when tracking the same id repeatedly', async () => {
       const scope = fork();
 
       await createInstances(scope, counterModel.create, [
-        { id: "a", data: { count: 1 } },
-        { id: "b", data: { count: 2 } },
+        { id: 'a', data: { count: 1 } },
+        { id: 'b', data: { count: 2 } },
       ]);
 
       const dashboardModel = createDashboardModel();
 
       await createInstances(scope, dashboardModel.create, [
-        { id: "d1", data: { name: "Dashboard #1" } },
+        { id: 'd1', data: { name: 'Dashboard #1' } },
       ]);
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
         },
       );
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
         },
       );
 
       await allSettled(
-        dashboardModel.lens.where((entity) => entity.id === "d1").track.target(),
+        dashboardModel.lens.where(entity => entity.id === 'd1').track.target(),
         {
           scope,
-          params: "a",
+          params: 'a',
         },
       );
 
       await allSettled(
         dashboardModel.lens
-          .where((entity) => entity.id === "d1")
+          .where(entity => entity.id === 'd1')
           .setSelectedCount.target(),
         {
           scope,
@@ -1322,54 +1304,54 @@ describe("models api", () => {
         b: { count: 2 },
       });
 
-      const counterModelRefId = dashboardModel["~api"].selected["~id"];
+      const counterModelRefId = dashboardModel['~api'].selected['~id'];
 
       expect(scope.getState(dashboardModel.$instances)).toMatchObject({
-        d1: { name: "Dashboard #1", "~refs": { [counterModelRefId]: ["a"] } },
+        d1: { name: 'Dashboard #1', '~refs': { [counterModelRefId]: ['a'] } },
       });
     });
 
-    describe("union ref", () => {
-      test("tracks ids per model key", async () => {
+    describe('union ref', () => {
+      test('tracks ids per model key', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 2 } },
+          { id: 'f1', data: { score: 2 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setSelectedValue.target(),
           {
             scope,
@@ -1386,48 +1368,48 @@ describe("models api", () => {
         });
       });
 
-      test("updates only tracked variants when match dispatches by union", async () => {
+      test('updates only tracked variants when match dispatches by union', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 3 } },
-          { id: "f2", data: { score: 4 } },
+          { id: 'f1', data: { score: 3 } },
+          { id: 'f2', data: { score: 4 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setSelectedValue.target(),
           {
             scope,
@@ -1446,56 +1428,56 @@ describe("models api", () => {
         });
       });
 
-      test("stops affecting a variant after it is removed from tracked ids", async () => {
+      test('stops affecting a variant after it is removed from tracked ids', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 2 } },
+          { id: 'f1', data: { score: 2 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .untrackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setSelectedValue.target(),
           {
             scope,
@@ -1514,23 +1496,21 @@ describe("models api", () => {
     });
   });
 
-  describe("child", () => {
-    test("create instance", async () => {
+  describe('child', () => {
+    test('create instance', async () => {
       const scope = fork();
       const listModel = createListModel();
-      const childItemsModel = (listModel as any)["~api"].items;
+      const childItemsModel = (listModel as any)['~api'].items;
 
       await createInstances(scope, listModel.create, [
-        { id: "l1", data: { title: "List #1" } },
+        { id: 'l1', data: { title: 'List #1' } },
       ]);
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l1")
-          .createItem.target(),
+        listModel.lens.where(entity => entity.id === 'l1').createItem.target(),
         {
           scope,
-          params: { id: "i1", data: { value: 1 } },
+          params: { id: 'i1', data: { value: 1 } },
         },
       );
 
@@ -1539,92 +1519,82 @@ describe("models api", () => {
       });
     });
 
-    test("remove instance", async () => {
+    test('remove instance', async () => {
       const scope = fork();
       const listModel = createListModel();
-      const childItemsModel = (listModel as any)["~api"].items;
+      const childItemsModel = (listModel as any)['~api'].items;
 
       await createInstances(scope, listModel.create, [
-        { id: "l1", data: { title: "List #1" } },
+        { id: 'l1', data: { title: 'List #1' } },
       ]);
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l1")
-          .createItem.target(),
+        listModel.lens.where(entity => entity.id === 'l1').createItem.target(),
         {
           scope,
-          params: { id: "i1", data: { value: 1 } },
+          params: { id: 'i1', data: { value: 1 } },
         },
       );
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l1")
-          .removeItem.target(),
+        listModel.lens.where(entity => entity.id === 'l1').removeItem.target(),
         {
           scope,
-          params: "i1",
+          params: 'i1',
         },
       );
 
       expect(scope.getState(childItemsModel.$instances)).toStrictEqual({});
     });
 
-    test("keeps child instances hidden outside of a parent context", async () => {
+    test('keeps child instances hidden outside of a parent context', async () => {
       const scope = fork();
       const listModel = createListModel();
-      const childItemsModel = (listModel as any)["~api"].items;
+      const childItemsModel = (listModel as any)['~api'].items;
 
       await createInstances(scope, listModel.create, [
-        { id: "l1", data: { title: "List #1" } },
+        { id: 'l1', data: { title: 'List #1' } },
       ]);
 
       await allSettled(childItemsModel.create, {
         scope,
-        params: { id: "detached", data: { value: 1 } },
+        params: { id: 'detached', data: { value: 1 } },
       });
 
       expect(scope.getState(childItemsModel.$instances)).toStrictEqual({});
       expect(
-        getChildInstancesByParent(scope, listModel, childItemsModel, "l1"),
+        getChildInstancesByParent(scope, listModel, childItemsModel, 'l1'),
       ).toStrictEqual({});
     });
 
-    test("stores child instances separately for each parent instance", async () => {
+    test('stores child instances separately for each parent instance', async () => {
       const scope = fork();
       const listModel = createListModel();
-      const childItemsModel = (listModel as any)["~api"].items;
+      const childItemsModel = (listModel as any)['~api'].items;
 
       await createInstances(scope, listModel.create, [
-        { id: "l1", data: { title: "List #1" } },
-        { id: "l2", data: { title: "List #2" } },
+        { id: 'l1', data: { title: 'List #1' } },
+        { id: 'l2', data: { title: 'List #2' } },
       ]);
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l1")
-          .createItem.target(),
+        listModel.lens.where(entity => entity.id === 'l1').createItem.target(),
         {
           scope,
-          params: { id: "shared", data: { value: 1 } },
+          params: { id: 'shared', data: { value: 1 } },
         },
       );
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l2")
-          .createItem.target(),
+        listModel.lens.where(entity => entity.id === 'l2').createItem.target(),
         {
           scope,
-          params: { id: "shared", data: { value: 2 } },
+          params: { id: 'shared', data: { value: 2 } },
         },
       );
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l1")
-          .items.value.target(),
+        listModel.lens.where(entity => entity.id === 'l1').items.value.target(),
         {
           scope,
           params: 10,
@@ -1632,52 +1602,46 @@ describe("models api", () => {
       );
 
       expect(
-        getChildInstancesByParent(scope, listModel, childItemsModel, "l1"),
+        getChildInstancesByParent(scope, listModel, childItemsModel, 'l1'),
       ).toMatchObject({
         shared: { value: 10 },
       });
 
       expect(
-        getChildInstancesByParent(scope, listModel, childItemsModel, "l2"),
+        getChildInstancesByParent(scope, listModel, childItemsModel, 'l2'),
       ).toMatchObject({
         shared: { value: 2 },
       });
     });
 
-    test("updates child units only inside the current parent context", async () => {
+    test('updates child units only inside the current parent context', async () => {
       const scope = fork();
       const listModel = createListModel();
-      const childItemsModel = (listModel as any)["~api"].items;
+      const childItemsModel = (listModel as any)['~api'].items;
 
       await createInstances(scope, listModel.create, [
-        { id: "l1", data: { title: "List #1" } },
-        { id: "l2", data: { title: "List #2" } },
+        { id: 'l1', data: { title: 'List #1' } },
+        { id: 'l2', data: { title: 'List #2' } },
       ]);
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l1")
-          .createItem.target(),
+        listModel.lens.where(entity => entity.id === 'l1').createItem.target(),
         {
           scope,
-          params: { id: "i1", data: { value: 1 } },
+          params: { id: 'i1', data: { value: 1 } },
         },
       );
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l2")
-          .createItem.target(),
+        listModel.lens.where(entity => entity.id === 'l2').createItem.target(),
         {
           scope,
-          params: { id: "i2", data: { value: 2 } },
+          params: { id: 'i2', data: { value: 2 } },
         },
       );
 
       await allSettled(
-        listModel.lens
-          .where((entity) => entity.id === "l1")
-          .items.value.target(),
+        listModel.lens.where(entity => entity.id === 'l1').items.value.target(),
         {
           scope,
           params: 7,
@@ -1685,32 +1649,32 @@ describe("models api", () => {
       );
 
       expect(
-        getChildInstancesByParent(scope, listModel, childItemsModel, "l1"),
+        getChildInstancesByParent(scope, listModel, childItemsModel, 'l1'),
       ).toMatchObject({
         i1: { value: 7 },
       });
 
       expect(
-        getChildInstancesByParent(scope, listModel, childItemsModel, "l2"),
+        getChildInstancesByParent(scope, listModel, childItemsModel, 'l2'),
       ).toMatchObject({
         i2: { value: 2 },
       });
     });
   });
 
-  describe("lens", () => {
-    describe("model lens", () => {
-      test("call instance unit", async () => {
+  describe('lens', () => {
+    describe('model lens', () => {
+      test('call instance unit', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         await allSettled(
           counterModel.lens
-            .where((entity) => entity.id === "a")
+            .where(entity => entity.id === 'a')
             .setCount.target(),
           {
             scope,
@@ -1724,33 +1688,33 @@ describe("models api", () => {
         });
       });
 
-      test("call ref instance unit", async () => {
+      test('call ref instance unit', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         const dashboardModel = createDashboardModel();
 
         await createInstances(scope, dashboardModel.create, [
-          { id: "d1", data: { name: "Dashboard #1" } },
+          { id: 'd1', data: { name: 'Dashboard #1' } },
         ]);
 
         await allSettled(
           dashboardModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .track.target(),
           {
             scope,
-            params: "b",
+            params: 'b',
           },
         );
 
         await allSettled(
           dashboardModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setSelectedCount.target(),
           {
             scope,
@@ -1764,28 +1728,28 @@ describe("models api", () => {
         });
       });
 
-      test("call child instance unit", async () => {
+      test('call child instance unit', async () => {
         const scope = fork();
         const listModel = createListModel();
-        const childItemsModel = (listModel as any)["~api"].items;
+        const childItemsModel = (listModel as any)['~api'].items;
 
         await createInstances(scope, listModel.create, [
-          { id: "l1", data: { title: "List #1" } },
+          { id: 'l1', data: { title: 'List #1' } },
         ]);
 
         await allSettled(
           listModel.lens
-            .where((entity) => entity.id === "l1")
+            .where(entity => entity.id === 'l1')
             .createItem.target(),
           {
             scope,
-            params: { id: "i1", data: { value: 1 } },
+            params: { id: 'i1', data: { value: 1 } },
           },
         );
 
         await allSettled(
           listModel.lens
-            .where((entity) => entity.id === "l1")
+            .where(entity => entity.id === 'l1')
             .setItemsValue.target(),
           {
             scope,
@@ -1798,18 +1762,18 @@ describe("models api", () => {
         });
       });
 
-      test("watch instance unit", async () => {
+      test('watch instance unit', async () => {
         const scope = fork();
         const seen: number[] = [];
 
         counterModel.lens
-          .where((entity) => entity.id === "a")
+          .where(entity => entity.id === 'a')
           .count.clock()
-          .watch((value) => seen.push(value));
+          .watch(value => seen.push(value));
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         await allSettled(counterModel.lens.setCount.target(), {
@@ -1820,37 +1784,37 @@ describe("models api", () => {
         expect(seen).toStrictEqual([9]);
       });
 
-      test("watch ref instance unit", async () => {
+      test('watch ref instance unit', async () => {
         const scope = fork();
         const seen: number[] = [];
         const dashboardModel = createDashboardModel();
-        const dashboardApi = (dashboardModel as any)["~api"];
+        const dashboardApi = (dashboardModel as any)['~api'];
 
         dashboardApi.selectedCountChanged.watch((value: number) =>
           seen.push(value),
         );
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, dashboardModel.create, [
-          { id: "d1", data: { name: "Dashboard #1" } },
+          { id: 'd1', data: { name: 'Dashboard #1' } },
         ]);
 
         await allSettled(
           dashboardModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .track.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setSelectedCount.target(),
           {
             scope,
@@ -1861,44 +1825,44 @@ describe("models api", () => {
         expect(seen).toStrictEqual([16]);
       });
 
-      test("watch child instance unit", async () => {
+      test('watch child instance unit', async () => {
         const scope = fork();
         const seen: number[] = [];
         const listModel = createListModel();
 
         listModel.lens
-          .where((entity) => entity.id === "l1")
+          .where(entity => entity.id === 'l1')
           .items.value.clock()
-          .watch((value) => seen.push(value));
+          .watch(value => seen.push(value));
 
         await createInstances(scope, listModel.create, [
-          { id: "l1", data: { title: "List #1" } },
-          { id: "l2", data: { title: "List #2" } },
+          { id: 'l1', data: { title: 'List #1' } },
+          { id: 'l2', data: { title: 'List #2' } },
         ]);
 
         await allSettled(
           listModel.lens
-            .where((entity) => entity.id === "l1")
+            .where(entity => entity.id === 'l1')
             .createItem.target(),
           {
             scope,
-            params: { id: "i1", data: { value: 1 } },
+            params: { id: 'i1', data: { value: 1 } },
           },
         );
 
         await allSettled(
           listModel.lens
-            .where((entity) => entity.id === "l2")
+            .where(entity => entity.id === 'l2')
             .createItem.target(),
           {
             scope,
-            params: { id: "i2", data: { value: 2 } },
+            params: { id: 'i2', data: { value: 2 } },
           },
         );
 
         await allSettled(
           listModel.lens
-            .where((entity) => entity.id === "l2")
+            .where(entity => entity.id === 'l2')
             .items.value.target(),
           {
             scope,
@@ -1908,7 +1872,7 @@ describe("models api", () => {
 
         await allSettled(
           listModel.lens
-            .where((entity) => entity.id === "l1")
+            .where(entity => entity.id === 'l1')
             .items.value.target(),
           {
             scope,
@@ -1919,13 +1883,13 @@ describe("models api", () => {
         expect(seen).toStrictEqual([9]);
       });
 
-      test("mass calling", async () => {
+      test('mass calling', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
-          { id: "c", data: { count: 3 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
+          { id: 'c', data: { count: 3 } },
         ]);
 
         await allSettled(counterModel.lens.setCount.target(), {
@@ -1940,16 +1904,16 @@ describe("models api", () => {
         });
       });
 
-      test("mass watching", async () => {
+      test('mass watching', async () => {
         const scope = fork();
         const seen: number[] = [];
 
-        counterModel.lens.count.clock().watch((value) => seen.push(value));
+        counterModel.lens.count.clock().watch(value => seen.push(value));
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
-          { id: "c", data: { count: 3 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
+          { id: 'c', data: { count: 3 } },
         ]);
 
         await allSettled(counterModel.lens.setCount.target(), {
@@ -1960,13 +1924,13 @@ describe("models api", () => {
         expect(seen).toStrictEqual([30, 30, 30]);
       });
 
-      test("limits action to the first matched instance", async () => {
+      test('limits action to the first matched instance', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
-          { id: "c", data: { count: 3 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
+          { id: 'c', data: { count: 3 } },
         ]);
 
         await allSettled(counterModel.lens.first().setCount.target(), {
@@ -1981,13 +1945,13 @@ describe("models api", () => {
         });
       });
 
-      test("limits action to the last matched instance", async () => {
+      test('limits action to the last matched instance', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
-          { id: "c", data: { count: 3 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
+          { id: 'c', data: { count: 3 } },
         ]);
 
         await allSettled(counterModel.lens.last().setCount.target(), {
@@ -2002,16 +1966,16 @@ describe("models api", () => {
         });
       });
 
-      test("filters model instances by ids without scanning the whole collection", async () => {
+      test('filters model instances by ids without scanning the whole collection', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
-          { id: "c", data: { count: 3 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
+          { id: 'c', data: { count: 3 } },
         ]);
 
-        await allSettled(counterModel.lens.ids("a", "c").setCount.target(), {
+        await allSettled(counterModel.lens.ids('a', 'c').setCount.target(), {
           scope,
           params: 60,
         });
@@ -2023,20 +1987,20 @@ describe("models api", () => {
         });
       });
 
-      test("targets model instances by alias ids", async () => {
+      test('targets model instances by alias ids', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a1", data: { count: 1 } },
-          { id: "b1", data: { count: 2 } },
+          { id: 'a1', data: { count: 1 } },
+          { id: 'b1', data: { count: 2 } },
         ]);
 
         await allSettled(counterModel.addAlias, {
           scope,
-          params: { aliasId: "a2", instanceId: "a1" },
+          params: { aliasId: 'a2', instanceId: 'a1' },
         });
 
-        await allSettled(counterModel.lens.ids("a2").setCount.target(), {
+        await allSettled(counterModel.lens.ids('a2').setCount.target(), {
           scope,
           params: 61,
         });
@@ -2047,7 +2011,7 @@ describe("models api", () => {
         });
       });
 
-      test("matches alias ids in props-based lens predicates", async () => {
+      test('matches alias ids in props-based lens predicates', async () => {
         const scope = fork();
         const websocketMessage = createEvent<{ id: string; count: number }>();
 
@@ -2056,22 +2020,22 @@ describe("models api", () => {
           target: counterModel.lens
             .props<{ id: string; count: number }>()
             .where((entity, payload) => entity.id === payload.id)
-            .setCount.target((payload) => payload.count),
+            .setCount.target(payload => payload.count),
         });
 
         await createInstances(scope, counterModel.create, [
-          { id: "a1", data: { count: 1 } },
-          { id: "b1", data: { count: 2 } },
+          { id: 'a1', data: { count: 1 } },
+          { id: 'b1', data: { count: 2 } },
         ]);
 
         await allSettled(counterModel.addAlias, {
           scope,
-          params: { aliasId: "a2", instanceId: "a1" },
+          params: { aliasId: 'a2', instanceId: 'a1' },
         });
 
         await allSettled(websocketMessage, {
           scope,
-          params: { id: "a2", count: 62 },
+          params: { id: 'a2', count: 62 },
         });
 
         expect(scope.getState(counterModel.$instances)).toStrictEqual({
@@ -2080,25 +2044,25 @@ describe("models api", () => {
         });
       });
 
-      test("watches model updates through alias ids", async () => {
+      test('watches model updates through alias ids', async () => {
         const scope = fork();
         const seen: number[] = [];
 
         counterModel.lens
-          .ids("a2")
+          .ids('a2')
           .count.clock()
-          .watch((value) => seen.push(value));
+          .watch(value => seen.push(value));
 
         await createInstances(scope, counterModel.create, [
-          { id: "a1", data: { count: 1 } },
+          { id: 'a1', data: { count: 1 } },
         ]);
 
         await allSettled(counterModel.addAlias, {
           scope,
-          params: { aliasId: "a2", instanceId: "a1" },
+          params: { aliasId: 'a2', instanceId: 'a1' },
         });
 
-        await allSettled(counterModel.lens.ids("a1").setCount.target(), {
+        await allSettled(counterModel.lens.ids('a1').setCount.target(), {
           scope,
           params: 63,
         });
@@ -2106,47 +2070,47 @@ describe("models api", () => {
         expect(seen).toStrictEqual([63]);
       });
 
-      test("creates aliases from a selected lens instance", async () => {
+      test('creates aliases from a selected lens instance', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a1", data: { count: 1 } },
+          { id: 'a1', data: { count: 1 } },
         ]);
 
-        await allSettled(counterModel.lens.ids("a1").addAlias(), {
+        await allSettled(counterModel.lens.ids('a1').addAlias(), {
           scope,
-          params: "a2",
+          params: 'a2',
         });
 
-        await allSettled(counterModel.lens.ids("a2").setCount.target(), {
+        await allSettled(counterModel.lens.ids('a2').setCount.target(), {
           scope,
           params: 64,
         });
 
         expect(scope.getState(counterModel.$aliases)).toStrictEqual({
-          a2: "a1",
+          a2: 'a1',
         });
         expect(scope.getState(counterModel.$instances)).toStrictEqual({
           a1: { count: 64 },
         });
       });
 
-      test("recursively exposes nested stores and events in lens api", async () => {
+      test('recursively exposes nested stores and events in lens api', async () => {
         const scope = fork();
         const seen: number[] = [];
 
-        nestedCounterModel.lens.form.count.clock().watch((value) => {
+        nestedCounterModel.lens.form.count.clock().watch(value => {
           seen.push(value);
         });
 
         await createInstances(scope, nestedCounterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 4 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 4 } },
         ]);
 
         await allSettled(
           nestedCounterModel.lens
-            .where((entity) => entity.id === "a")
+            .where(entity => entity.id === 'a')
             .form.actions.setCount.target(),
           {
             scope,
@@ -2156,7 +2120,7 @@ describe("models api", () => {
 
         await allSettled(
           nestedCounterModel.lens
-            .where((entity) => entity.id === "b")
+            .where(entity => entity.id === 'b')
             .form.actions.setCount.target(),
           {
             scope,
@@ -2172,48 +2136,48 @@ describe("models api", () => {
       });
     });
 
-    describe("union lens", () => {
-      test("splits actions by union variants with match", async () => {
+    describe('union lens', () => {
+      test('splits actions by union variants with match', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 3 } },
+          { id: 'f1', data: { score: 3 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setSelectedValue.target(),
           {
             scope,
@@ -2231,46 +2195,46 @@ describe("models api", () => {
         });
       });
 
-      test("limits available variants with only", async () => {
+      test('limits available variants with only', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 3 } },
+          { id: 'f1', data: { score: 3 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setCounterOnly.target(),
           {
             scope,
@@ -2287,48 +2251,48 @@ describe("models api", () => {
         });
       });
 
-      test("deletes matched instances across several variants", async () => {
+      test('deletes matched instances across several variants', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 3 } },
-          { id: "f2", data: { score: 4 } },
+          { id: 'f1', data: { score: 3 } },
+          { id: 'f2', data: { score: 4 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .deleteSelected.target(),
           {
             scope,
@@ -2345,57 +2309,57 @@ describe("models api", () => {
         });
       });
 
-      test("limits action to the first matched union entity", async () => {
+      test('limits action to the first matched union entity', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 3 } },
+          { id: 'f1', data: { score: 3 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "b",
+            params: 'b',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setFirstSelectedValue.target(),
           {
             scope,
@@ -2413,57 +2377,57 @@ describe("models api", () => {
         });
       });
 
-      test("limits action to the last matched union entity", async () => {
+      test('limits action to the last matched union entity', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 3 } },
-          { id: "f2", data: { score: 4 } },
+          { id: 'f1', data: { score: 3 } },
+          { id: 'f2', data: { score: 4 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f2",
+            params: 'f2',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setLastSelectedValue.target(),
           {
             scope,
@@ -2481,46 +2445,46 @@ describe("models api", () => {
         });
       });
 
-      test("keeps sub-lens predicates isolated between match handlers", async () => {
+      test('keeps sub-lens predicates isolated between match handlers', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 0 } },
+          { id: 'f1', data: { score: 0 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setWithIsolatedMatch.target(),
           {
             scope,
@@ -2537,16 +2501,16 @@ describe("models api", () => {
         });
       });
 
-      test("filters union instances by unique ids", async () => {
+      test('filters union instances by unique ids', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
-          { id: "b", data: { count: 2 } },
+          { id: 'a', data: { count: 1 } },
+          { id: 'b', data: { count: 2 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 3 } },
+          { id: 'f1', data: { score: 3 } },
         ]);
 
         const selection = union({
@@ -2558,12 +2522,12 @@ describe("models api", () => {
         await allSettled(
           selectionLens
             .ids(
-              selectionLens.uniqueId("counter", "a"),
-              selectionLens.uniqueId("flagged", "f1"),
+              selectionLens.uniqueId('counter', 'a'),
+              selectionLens.uniqueId('flagged', 'f1'),
             )
             .match({
-              counter: (counter) => counter.count.target(),
-              flagged: (flagged) => flagged.score.target(),
+              counter: counter => counter.count.target(),
+              flagged: flagged => flagged.score.target(),
             }),
           {
             scope,
@@ -2582,47 +2546,47 @@ describe("models api", () => {
       });
     });
 
-    describe("union where context", () => {
-      test("supports ctx.match inside where", async () => {
+    describe('union where context', () => {
+      test('supports ctx.match inside where', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 0 } },
+          { id: 'f1', data: { score: 0 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setMatchedByContext.target(),
           {
             scope,
@@ -2639,46 +2603,46 @@ describe("models api", () => {
         });
       });
 
-      test("supports ctx.uniqueId inside where", async () => {
+      test('supports ctx.uniqueId inside where', async () => {
         const scope = fork();
 
         await createInstances(scope, counterModel.create, [
-          { id: "a", data: { count: 1 } },
+          { id: 'a', data: { count: 1 } },
         ]);
 
         await createInstances(scope, flaggedModel.create, [
-          { id: "f1", data: { score: 2 } },
+          { id: 'f1', data: { score: 2 } },
         ]);
 
         const dashboardUnionModel = createDashboardUnionModel();
 
         await createInstances(scope, dashboardUnionModel.create, [
-          { id: "d1", data: { name: "Union dashboard" } },
+          { id: 'd1', data: { name: 'Union dashboard' } },
         ]);
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackCounter.target(),
           {
             scope,
-            params: "a",
+            params: 'a',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .trackFlagged.target(),
           {
             scope,
-            params: "f1",
+            params: 'f1',
           },
         );
 
         await allSettled(
           dashboardUnionModel.lens
-            .where((entity) => entity.id === "d1")
+            .where(entity => entity.id === 'd1')
             .setByUniqueId.target(),
           {
             scope,
@@ -2714,7 +2678,7 @@ const nestedCounterModel = model({
     sample({
       clock: increment,
       source: count,
-      fn: (value) => value + 1,
+      fn: value => value + 1,
       target: count,
     });
 

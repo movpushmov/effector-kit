@@ -1,25 +1,28 @@
 {
   "name": "@effector-kit/inspector",
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  },
-  "private": false,
   "version": "0.16.0",
+  "private": false,
   "description": "Effector inspector",
   "keywords": [
-    "effector",
-    "kit",
-    "effector-kit",
     "debug",
     "debugging",
+    "effector",
+    "effector-kit",
+    "inspector",
+    "kit",
     "visualization",
-    "visualizer",
-    "inspector"
+    "visualizer"
   ],
-  "author": "movpushmov",
   "homepage": "https://github.com/movpushmov/effector-kit#readme",
+  "bugs": {
+    "url": "https://github.com/movpushmov/effector-kit/issues"
+  },
   "license": "MIT",
+  "author": "movpushmov",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/movpushmov/effector-kit.git"
+  },
   "directories": {
     "lib": "lib"
   },
@@ -35,13 +38,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/movpushmov/effector-kit.git"
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {},
-  "bugs": {
-    "url": "https://github.com/movpushmov/effector-kit/issues"
-  },
   "packageManager": "pnpm@10.10.0"
 }

@@ -1,24 +1,24 @@
-import { createEvent, type EventCallable } from "effector";
+import { createEvent, type EventCallable } from 'effector';
 import {
   model as createModel,
   type Contract,
   type ContractData,
   type Model,
   type ModelApi,
-} from "@effector-kit/models";
-import { createCreatedModel, toViewEntity } from "./runtime";
-import { useModel } from "./use-model";
+} from '@effector-kit/models';
+import { createCreatedModel, toViewEntity } from './runtime';
+import { useModel } from './use-model';
 import type {
   ComponentConfig,
   ComponentProps,
   InferContract,
   ModelComponent,
-} from "./types";
+} from './types';
 
 function resolveContract<Input extends Contract<any> | (() => Contract<any>)>(
   input: Input,
 ): InferContract<Input> {
-  if (typeof input === "function") {
+  if (typeof input === 'function') {
     return (input as () => InferContract<Input>)();
   }
 
@@ -31,13 +31,13 @@ function extractComponentData<T extends Model<any, any>>(
 ) {
   const data: Record<string, unknown> = {};
 
-  for (const key of Object.keys(model["~contract"].shape)) {
+  for (const key of Object.keys(model['~contract'].shape)) {
     if (key in props) {
       data[key] = props[key as keyof typeof props];
     }
   }
 
-  return data as Partial<ContractData<T["~contract"]>>;
+  return data as Partial<ContractData<T['~contract']>>;
 }
 
 function extractMountedPayload<
@@ -47,7 +47,7 @@ function extractMountedPayload<
   const payload: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(props)) {
-    if (key === "model" || key in model["~contract"].shape) {
+    if (key === 'model' || key in model['~contract'].shape) {
       continue;
     }
 

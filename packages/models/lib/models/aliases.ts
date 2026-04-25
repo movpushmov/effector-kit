@@ -1,6 +1,6 @@
-import type { AddAliasPayload, Aliases } from "./types";
+import type { AddAliasPayload, Aliases } from './types';
 
-const sourceInstanceKey = Symbol("effector-kit.source-instance");
+const sourceInstanceKey = Symbol('effector-kit.source-instance');
 
 type InstancesMap = Record<string, any>;
 
@@ -73,8 +73,8 @@ export function normalizeAddAliasPayload(
 ): Array<{ aliasId: string; instanceId?: string }> {
   const list = Array.isArray(payload) ? payload : [payload];
 
-  return list.map((item) =>
-    typeof item === "string" ? { aliasId: item } : item,
+  return list.map(item =>
+    typeof item === 'string' ? { aliasId: item } : item,
   );
 }
 
@@ -231,7 +231,7 @@ export function markSourceInstance<T extends object>(
 
 function getSourceInstance(value: unknown): unknown {
   if (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
     sourceInstanceKey in value
   ) {
@@ -251,7 +251,7 @@ export function dedupeInstances<T extends Record<string | number, any>>(
   for (const [id, instance] of Object.entries(instances)) {
     const sourceInstance = getSourceInstance(instance);
 
-    if (typeof sourceInstance === "object" && sourceInstance !== null) {
+    if (typeof sourceInstance === 'object' && sourceInstance !== null) {
       if (seenObjects.has(sourceInstance)) {
         continue;
       }

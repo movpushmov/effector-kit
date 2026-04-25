@@ -1,1 +1,1 @@
-export { child } from "./child";
+export { child } from './child';

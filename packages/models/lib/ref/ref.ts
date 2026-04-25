@@ -1,18 +1,18 @@
-import { createEvent, createStore, sample } from "effector";
-import type { Model } from "../models";
-import { lens } from "../lens";
-import type { Ref } from "./types";
-import { is as modelIs } from "../is";
-import type { Union, UnionMap } from "../union";
+import { createEvent, createStore, sample } from 'effector';
+import type { Model } from '../models';
+import { lens } from '../lens';
+import type { Ref } from './types';
+import { is as modelIs } from '../is';
+import type { Union, UnionMap } from '../union';
 import {
   getDeclarationModelId,
   getEntityId,
   modifyRefsStore,
-} from "../runtime";
+} from '../runtime';
 import {
   expandInstancesWithAliases,
   markSourceInstance,
-} from "../models/aliases";
+} from '../models/aliases';
 
 type RefItem = { key: string; id: string };
 
@@ -21,20 +21,20 @@ function setModelRefSource(
   model: Model<any, any>,
   $ids: ReturnType<typeof createStore<string[]>>,
 ): void {
-  patchedLens["~setSource"]?.({
+  patchedLens['~setSource']?.({
+    source: {
+      ids: $ids,
+      instances: model.$instances,
+      aliases: model.$aliases,
+    },
+    getSource: (
+      _: any,
       source: {
-        ids: $ids,
-        instances: model.$instances,
-        aliases: model.$aliases,
+        ids: string[];
+        instances: Record<string, any>;
+        aliases: Record<string, string>;
       },
-      getSource: (
-        _: any,
-        source: {
-          ids: string[];
-          instances: Record<string, any>;
-          aliases: Record<string, string>;
-        },
-      ) => {
+    ) => {
       const ids = source?.ids ?? $ids.getState() ?? [];
 
       if (!ids.length) {
@@ -60,7 +60,7 @@ function setUnionRefSource(
   input: Union<UnionMap>,
   $ids: ReturnType<typeof createStore<RefItem[]>>,
 ): void {
-  patchedLens["~setSource"]?.({
+  patchedLens['~setSource']?.({
     source: {
       ids: $ids,
       models: Object.fromEntries(
@@ -119,11 +119,11 @@ function setUnionRefSource(
           continue;
         }
 
-        result[`${model["~id"]}:${id}`] = markSourceInstance(
+        result[`${model['~id']}:${id}`] = markSourceInstance(
           {
             ...instancesWithAliases[id],
             id,
-            "~model": key,
+            '~model': key,
           },
           instancesWithAliases[id],
         );
@@ -142,12 +142,12 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
   const declarationModelId = getDeclarationModelId();
 
   if (declarationModelId) {
-    (patchedLens as any)["~setContextModelId"]?.(declarationModelId);
+    (patchedLens as any)['~setContextModelId']?.(declarationModelId);
   }
 
   if (modelIs.union(input)) {
     const $ids = createStore<RefItem[]>([], {
-      serialize: "ignore",
+      serialize: 'ignore',
     });
 
     modifyRefsStore($ids as any, refId, declarationModelId);
@@ -164,7 +164,7 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
         clock: addKey,
         source: $ids,
         filter: (ids, id) =>
-          !ids.some((item) => item.key === key && item.id === id),
+          !ids.some(item => item.key === key && item.id === id),
         fn: (ids, id) => [...ids, { key, id }],
         target: $ids,
       });
@@ -172,7 +172,7 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
       sample({
         clock: removeKey,
         source: $ids,
-        fn: (ids, id) => ids.filter((i) => !(i.key === key && i.id === id)),
+        fn: (ids, id) => ids.filter(i => !(i.key === key && i.id === id)),
         target: $ids,
       });
 
@@ -181,9 +181,9 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
     }
 
     return {
-      "~kind": "ref",
-      "~id": refId,
-      "~target": input,
+      '~kind': 'ref',
+      '~id': refId,
+      '~target': input,
       lens: patchedLens,
       add,
       remove,
@@ -211,14 +211,14 @@ export function ref(input: Union<UnionMap> | Model<any, any>): Ref<any> {
   sample({
     clock: remove,
     source: $ids,
-    fn: (ids, id) => ids.filter((i) => i !== id),
+    fn: (ids, id) => ids.filter(i => i !== id),
     target: $ids,
   });
 
   return {
-    "~kind": "ref",
-    "~id": refId,
-    "~target": modelInput,
+    '~kind': 'ref',
+    '~id': refId,
+    '~target': modelInput,
     lens: patchedLens,
     add,
     remove,

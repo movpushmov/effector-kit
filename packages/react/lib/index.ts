@@ -1,5 +1,5 @@
-export { useModel } from "./use-model";
-export { component } from "./component";
+export { useModel } from './use-model';
+export { component } from './component';
 
 export type {
   ComponentConfig,
@@ -13,4 +13,4 @@ export type {
   ReactModelHandle,
   ReactModelValue,
   UseModelOptions,
-} from "./types";
+} from './types';

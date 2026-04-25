@@ -3,10 +3,10 @@ import {
   createStore,
   type EventCallable,
   type StoreWritable,
-} from "effector";
-import type { Contract, ShapeElement } from "../contracts";
-import type { ContractApi, ContractData } from "./types";
-import { modifyStore } from "../runtime";
+} from 'effector';
+import type { Contract, ShapeElement } from '../contracts';
+import type { ContractApi, ContractData } from './types';
+import { modifyStore } from '../runtime';
 
 interface TransformContext {
   key: string;
@@ -26,21 +26,21 @@ function transform(
     const item = from[key];
 
     if (!item) {
-      throw new Error("Invalid item type: undefined");
+      throw new Error('Invalid item type: undefined');
     }
 
-    switch (item?.["~kind"]) {
-      case "store": {
+    switch (item?.['~kind']) {
+      case 'store': {
         to[key] = api.onStore(item.defaultValue, { key });
-        Object.defineProperty(to[key], "~field", {
+        Object.defineProperty(to[key], '~field', {
           value: key,
           configurable: true,
         });
         break;
       }
-      case "event": {
+      case 'event': {
         to[key] = api.onEvent();
-        Object.defineProperty(to[key], "~field", {
+        Object.defineProperty(to[key], '~field', {
           value: key,
           configurable: true,
         });
@@ -57,7 +57,7 @@ export function createApi<T extends Contract<any>>(
 
   transform(contract.shape, api, {
     onStore: (defaultValue, { key }) => {
-      const store = createStore(defaultValue, { serialize: "ignore" });
+      const store = createStore(defaultValue, { serialize: 'ignore' });
       modifyStore(store, key);
 
       return store;

@@ -22,18 +22,18 @@ pnpm add @effector-kit/models effector effector-action
 ## Basic example
 
 ```ts
-import { createEvent, sample } from "effector";
+import { createEvent, sample } from 'effector';
 import {
   contract,
   define,
   model,
   type TNumber,
   type TString,
-} from "@effector-kit/models";
+} from '@effector-kit/models';
 
 const todoModel = model({
   contract: contract({
-    title: define.store(define.schema<TString>(), ""),
+    title: define.store(define.schema<TString>(), ''),
     done: define.store(define.schema<TNumber>(), 0),
   })(),
   fn: ({ title, done }) => {
@@ -60,9 +60,9 @@ const todoModel = model({
 });
 
 todoModel.create({
-  id: "a",
+  id: 'a',
   data: {
-    title: "Write docs",
+    title: 'Write docs',
     done: 0,
   },
 });
@@ -79,12 +79,12 @@ import {
   type TNumber,
   type TRef,
   type TString,
-} from "@effector-kit/models";
+} from '@effector-kit/models';
 
-define.store(define.schema<TString>(), "");
+define.store(define.schema<TString>(), '');
 define.store(define.schema<TNumber>(), 0);
 define.store(define.schema<TBoolean>(), false);
-define.event(define.schema<TRef<"Payload">>());
+define.event(define.schema<TRef<'Payload'>>());
 ```
 
 Common exported schema helpers:
@@ -112,8 +112,8 @@ Generic contracts are supported through `TRef<"...">`.
 
 ```ts
 const makeValueContract = contract({
-  value: define.store(define.schema<TRef<"Value">>(), "" as never),
-  change: define.event(define.schema<TRef<"Value">>()),
+  value: define.store(define.schema<TRef<'Value'>>(), '' as never),
+  change: define.event(define.schema<TRef<'Value'>>()),
 });
 
 const stringValueContract = makeValueContract<{ Value: string }>();
@@ -160,14 +160,14 @@ The returned model has:
 ### Creating and deleting instances
 
 ```ts
-counterModel.create({ id: "a", data: { count: 1 } });
+counterModel.create({ id: 'a', data: { count: 1 } });
 counterModel.create([
-  { id: "b", data: { count: 2 } },
-  { id: "c", data: { count: 3 } },
+  { id: 'b', data: { count: 2 } },
+  { id: 'c', data: { count: 3 } },
 ]);
 
-counterModel.delete("a");
-counterModel.delete(["b", "c"]);
+counterModel.delete('a');
+counterModel.delete(['b', 'c']);
 ```
 
 ### Instance aliases
@@ -179,27 +179,27 @@ Aliases are stored separately in `$aliases` as `aliasId -> instanceId`.
 All lens reads, lens targets, refs, child models, union lenses, and React bindings resolve aliases before touching the real instance.
 
 ```ts
-counterModel.create({ id: "a1", data: { count: 1 } });
+counterModel.create({ id: 'a1', data: { count: 1 } });
 
 counterModel.addAlias({
-  aliasId: "a2",
-  instanceId: "a1",
+  aliasId: 'a2',
+  instanceId: 'a1',
 });
 
 // Targets the original "a1" instance through the alias id.
 sample({
   clock: createEvent<number>(),
-  target: counterModel.lens.ids("a2").count.target(),
+  target: counterModel.lens.ids('a2').count.target(),
 });
 ```
 
 `addAlias(...)` accepts an object when the target instance is known outside of a model context:
 
 ```ts
-counterModel.addAlias({ aliasId: "a2", instanceId: "a1" });
+counterModel.addAlias({ aliasId: 'a2', instanceId: 'a1' });
 counterModel.addAlias([
-  { aliasId: "a2", instanceId: "a1" },
-  { aliasId: "a3", instanceId: "a1" },
+  { aliasId: 'a2', instanceId: 'a1' },
+  { aliasId: 'a3', instanceId: 'a1' },
 ]);
 ```
 
@@ -208,14 +208,14 @@ counterModel.addAlias([
 When the event is launched inside an instance context, it can receive just the alias id:
 
 ```ts
-counterModel.addAlias("a2");
+counterModel.addAlias('a2');
 ```
 
 That form is usually reached through `lens.addAlias()`.
 
 ```ts
-counterModel.removeAlias("a2");
-counterModel.removeAlias(["a2", "a3"]);
+counterModel.removeAlias('a2');
+counterModel.removeAlias(['a2', 'a3']);
 ```
 
 Alias lifecycle rules:
@@ -264,7 +264,7 @@ sample({
 Watches updates from matched instances.
 
 ```ts
-counterModel.lens.count.clock().watch((value) => {
+counterModel.lens.count.clock().watch(value => {
   console.log(value);
 });
 ```
@@ -272,12 +272,12 @@ counterModel.lens.count.clock().watch((value) => {
 This also works for nested plain objects returned from `model(...)`.
 
 ```ts
-import { createEvent, createStore, sample } from "effector";
-import { contract, define, model, type TString } from "@effector-kit/models";
+import { createEvent, createStore, sample } from 'effector';
+import { contract, define, model, type TString } from '@effector-kit/models';
 
 const settingsModel = model({
   contract: contract({
-    title: define.store(define.schema<TString>(), ""),
+    title: define.store(define.schema<TString>(), ''),
   })(),
   fn: ({ title }) => {
     const opened = createStore(false);
@@ -285,7 +285,7 @@ const settingsModel = model({
 
     sample({
       clock: toggle,
-      fn: (value) => !value,
+      fn: value => !value,
       source: opened,
       target: opened,
     });
@@ -300,7 +300,7 @@ const settingsModel = model({
   },
 });
 
-settingsModel.lens.panel.opened.clock().watch((value) => {
+settingsModel.lens.panel.opened.clock().watch(value => {
   console.log(value);
 });
 
@@ -315,13 +315,13 @@ sample({
 Filters instances.
 
 ```ts
-counterModel.lens.where((entity) => entity.count > 0).count.target();
+counterModel.lens.where(entity => entity.count > 0).count.target();
 ```
 
 For a regular model lens, `where(...)` receives the current entity data plus `id`.
 
 ```ts
-counterModel.lens.where((entity) => entity.id === "a").count.target();
+counterModel.lens.where(entity => entity.id === 'a').count.target();
 ```
 
 For a union lens, `where(...)` receives union entity data plus `id`.
@@ -336,15 +336,15 @@ Union `where(...)` also exposes `ctx` helpers:
 ```ts
 selection.lens.where((entity, _, ctx) =>
   ctx.match({
-    counter: (counter) => counter.count > 0,
-    flagged: (flagged) => flagged.score > 0,
+    counter: counter => counter.count > 0,
+    flagged: flagged => flagged.score > 0,
   }),
 );
 ```
 
 ```ts
 selection.lens.where((entity, _, ctx) => {
-  return entity.id === ctx.uniqueId("counter", "a");
+  return entity.id === ctx.uniqueId('counter', 'a');
 });
 ```
 
@@ -355,9 +355,9 @@ Filters instances by explicit ids.
 For regular model lenses, pass instance ids or alias ids directly:
 
 ```ts
-counterModel.lens.ids("a").count.target();
-counterModel.lens.ids("a-alias").count.target();
-counterModel.lens.ids("a", "c").count.target();
+counterModel.lens.ids('a').count.target();
+counterModel.lens.ids('a-alias').count.target();
+counterModel.lens.ids('a', 'c').count.target();
 ```
 
 Predicates also receive alias ids, so external messages can route by either original id or alias id.
@@ -372,7 +372,7 @@ sample({
   target: counterModel.lens
     .props<SocketMessage>()
     .where((entity, message) => entity.id === message.id)
-    .count.target((message) => message.count),
+    .count.target(message => message.count),
 });
 ```
 
@@ -381,12 +381,12 @@ For union lenses, pass namespaced ids created with `uniqueId(...)`:
 ```ts
 selection.lens
   .ids(
-    selection.lens.uniqueId("counter", "a"),
-    selection.lens.uniqueId("flagged", "f1"),
+    selection.lens.uniqueId('counter', 'a'),
+    selection.lens.uniqueId('flagged', 'f1'),
   )
   .match({
-    counter: (counter) => counter.count.target(),
-    flagged: (flagged) => flagged.score.target(),
+    counter: counter => counter.count.target(),
+    flagged: flagged => flagged.score.target(),
   });
 ```
 
@@ -397,7 +397,7 @@ Restricts the selection to one matched instance.
 ```ts
 counterModel.lens.first().count.target();
 counterModel.lens.last().count.target();
-counterModel.lens.ids("a").single().count.target();
+counterModel.lens.ids('a').single().count.target();
 ```
 
 `single()` is useful when your code expects one concrete instance from an
@@ -410,7 +410,7 @@ React bindings use this marker so `useModel(model, lens.single())` returns
 Deletes all currently matched instances.
 
 ```ts
-counterModel.lens.where((entity) => entity.count === 0).delete();
+counterModel.lens.where(entity => entity.count === 0).delete();
 ```
 
 If the selection contains an alias id, the original instance is deleted.
@@ -425,7 +425,7 @@ const aliasCurrentCounter = createEvent<string>();
 
 sample({
   clock: aliasCurrentCounter,
-  target: counterModel.lens.ids("a1").addAlias(),
+  target: counterModel.lens.ids('a1').addAlias(),
 });
 ```
 
@@ -440,7 +440,7 @@ When you already know the target id, prefer `model.addAlias({ aliasId, instanceI
 It narrows the active set of variants before you access variant-specific API.
 
 ```ts
-selection.lens.only("counter").counter.count.target();
+selection.lens.only('counter').counter.count.target();
 ```
 
 This is useful when you want to keep working with one branch of a union without writing a full `match(...)`.
@@ -453,8 +453,8 @@ It lets you route one action to different sub-lenses for different variants.
 
 ```ts
 selection.lens.match({
-  counter: (counter) => counter.count.target(),
-  flagged: (flagged) => flagged.score.target(),
+  counter: counter => counter.count.target(),
+  flagged: flagged => flagged.score.target(),
 });
 ```
 
@@ -462,10 +462,8 @@ You can use additional filters inside each branch, and those predicates stay iso
 
 ```ts
 selection.lens.match({
-  counter: (counter) =>
-    counter.where((entity) => entity.count > 0).count.target(),
-  flagged: (flagged) =>
-    flagged.where((entity) => entity.score > 0).score.target(),
+  counter: counter => counter.where(entity => entity.count > 0).count.target(),
+  flagged: flagged => flagged.where(entity => entity.score > 0).score.target(),
 });
 ```
 
@@ -476,7 +474,7 @@ selection.lens.match({
 ```ts
 const dashboardModel = model({
   contract: contract({
-    name: define.store(define.schema<TString>(), ""),
+    name: define.store(define.schema<TString>(), ''),
   })(),
   fn: ({ name }) => {
     const selected = ref(counterModel);
@@ -553,7 +551,7 @@ const itemModel = model({
 
 const listModel = model({
   contract: contract({
-    title: define.store(define.schema<TString>(), ""),
+    title: define.store(define.schema<TString>(), ''),
   })(),
   fn: ({ title }) => {
     const items = child(itemModel);
@@ -613,8 +611,8 @@ Example:
 
 ```ts
 selection.lens.match({
-  counter: (counter) => counter.count.target(),
-  flagged: (flagged) => flagged.score.target(),
+  counter: counter => counter.count.target(),
+  flagged: flagged => flagged.score.target(),
 });
 ```
 
@@ -640,13 +638,13 @@ The package is designed to work with Effector scopes.
 Typical flow in tests:
 
 ```ts
-import { allSettled, fork } from "effector";
+import { allSettled, fork } from 'effector';
 
 const scope = fork();
 
 await allSettled(counterModel.create, {
   scope,
-  params: { id: "a", data: { count: 1 } },
+  params: { id: 'a', data: { count: 1 } },
 });
 
 await allSettled(counterModel.lens.count.target(), {

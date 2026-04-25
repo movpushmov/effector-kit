@@ -1,2 +1,2 @@
-export { union } from "./union";
-export type { Union, UnionMap } from "./types";
+export { union } from './union';
+export type { Union, UnionMap } from './types';

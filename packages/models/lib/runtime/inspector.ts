@@ -6,12 +6,12 @@ import {
   withRegion,
   type Node,
   type Stack,
-} from "effector";
-import { is as runtimeIs } from "../is";
-import type { Model } from "../models";
-import { getContext, setContext } from "./context";
-import { syncReservedStores } from "./api";
-import type { RuntimeContext } from "./types";
+} from 'effector';
+import { is as runtimeIs } from '../is';
+import type { Model } from '../models';
+import { getContext, setContext } from './context';
+import { syncReservedStores } from './api';
+import type { RuntimeContext } from './types';
 
 type Fn<T> = () => T;
 type ParamsContextBucket = {
@@ -76,7 +76,7 @@ function pushEffectContext(
   const snapshot = cloneRuntimeContext(context);
   const bucket = getParamsContextBucket(effectId);
 
-  if (typeof params === "object" && params !== null) {
+  if (typeof params === 'object' && params !== null) {
     const queue = bucket.object.get(params) ?? [];
 
     queue.push(snapshot);
@@ -101,7 +101,7 @@ function shiftEffectContext(
   }
 
   const queue =
-    typeof params === "object" && params !== null
+    typeof params === 'object' && params !== null
       ? bucket.object.get(params)
       : bucket.primitive.get(params);
 
@@ -111,7 +111,7 @@ function shiftEffectContext(
 
   const context = queue.shift();
 
-  if (!queue.length && (typeof params !== "object" || params === null)) {
+  if (!queue.length && (typeof params !== 'object' || params === null)) {
     bucket.primitive.delete(params);
   }
 
@@ -131,7 +131,7 @@ function pushEffectResultContext(
 
   effectResultContexts.set(effectId, bucket);
 
-  if (typeof value === "object" && value !== null) {
+  if (typeof value === 'object' && value !== null) {
     const queue = bucket.object.get(value) ?? [];
 
     queue.push(snapshot);
@@ -156,7 +156,7 @@ function shiftEffectResultContext(
   }
 
   const queue =
-    typeof value === "object" && value !== null
+    typeof value === 'object' && value !== null
       ? bucket.object.get(value)
       : bucket.primitive.get(value);
 
@@ -166,7 +166,7 @@ function shiftEffectResultContext(
 
   const context = queue.shift();
 
-  if (!queue.length && (typeof value !== "object" || value === null)) {
+  if (!queue.length && (typeof value !== 'object' || value === null)) {
     bucket.primitive.delete(value);
   }
 
@@ -193,7 +193,7 @@ function collectEffectOwnerIds(node: Node): string[] {
 
     visited.add(currentNode.id);
 
-    if (currentNode.meta?.op === "effect") {
+    if (currentNode.meta?.op === 'effect') {
       effectIds.push(currentNode.id);
       continue;
     }
@@ -222,21 +222,21 @@ function getEffectContextFromNode(
 }
 
 function getRuntimeContext(
-  stack: Stack & { "~modelsRuntimeCtx"?: RuntimeContext },
+  stack: Stack & { '~modelsRuntimeCtx'?: RuntimeContext },
 ): RuntimeContext {
   const currentContext = getContext();
   const stackMeta = stack.meta as
-    | (Record<string, unknown> & { "~modelsRuntimeCtx"?: RuntimeContext })
+    | (Record<string, unknown> & { '~modelsRuntimeCtx'?: RuntimeContext })
     | undefined;
   const stackContext =
-    stack["~modelsRuntimeCtx"] ?? stackMeta?.["~modelsRuntimeCtx"];
+    stack['~modelsRuntimeCtx'] ?? stackMeta?.['~modelsRuntimeCtx'];
 
   if (currentContext.current) {
     // Prefer the live global context for direct launches. This keeps per-call
     // instance routing correct even when multiple launches are batched.
-    stack["~modelsRuntimeCtx"] = currentContext;
+    stack['~modelsRuntimeCtx'] = currentContext;
     if (stackMeta) {
-      stackMeta["~modelsRuntimeCtx"] = currentContext;
+      stackMeta['~modelsRuntimeCtx'] = currentContext;
     }
     return currentContext;
   }
@@ -257,9 +257,11 @@ function getRuntimeContext(
   return currentContext;
 }
 
-function isPlainModelApiObject(value: unknown): value is Record<string, unknown> {
+function isPlainModelApiObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
     !is.store(value) &&
     !runtimeIs.model(value) &&
@@ -268,7 +270,9 @@ function isPlainModelApiObject(value: unknown): value is Record<string, unknown>
   );
 }
 
-function collectStoreDescriptors(api: Record<string, unknown>): StoreDescriptor[] {
+function collectStoreDescriptors(
+  api: Record<string, unknown>,
+): StoreDescriptor[] {
   const cached = modelStoreDescriptors.get(api);
 
   if (cached) {
@@ -283,8 +287,8 @@ function collectStoreDescriptors(api: Record<string, unknown>): StoreDescriptor[
       const apiElement = value as any;
       const rootId = apiElement.graphite.meta.rootStateRefId as string;
       const field =
-        typeof apiElement["~field"] === "string"
-          ? (apiElement["~field"] as string)
+        typeof apiElement['~field'] === 'string'
+          ? (apiElement['~field'] as string)
           : undefined;
 
       if (seenStores.has(rootId)) {
@@ -330,7 +334,7 @@ function primeStoreScopes(
 ): void {
   const { model, instance } = context.current!;
   const descriptors = collectStoreDescriptors(
-    model["~api"] as Record<string, unknown>,
+    model['~api'] as Record<string, unknown>,
   );
 
   for (const { key, rootId, field, store } of descriptors) {
@@ -342,7 +346,7 @@ function primeStoreScopes(
 
     if (key && key in instance) {
       instanceValue = instance[key];
-    } else if (typeof field === "string" && field in instance) {
+    } else if (typeof field === 'string' && field in instance) {
       instanceValue = instance[field];
     } else {
       try {
@@ -399,12 +403,12 @@ function modifyRegion(node: Node) {
 
   function applyContextToStack(
     context: RuntimeContext,
-    stack: Stack & { "~modelsRuntimeCtx"?: RuntimeContext },
+    stack: Stack & { '~modelsRuntimeCtx'?: RuntimeContext },
   ): void {
     const stackMeta = (stack.meta ??= {}) as Record<string, unknown>;
 
-    stackMeta["~modelsRuntimeCtx"] = context;
-    stack["~modelsRuntimeCtx"] = context;
+    stackMeta['~modelsRuntimeCtx'] = context;
+    stack['~modelsRuntimeCtx'] = context;
     context.current!.scope = stack.scope;
     setContext(context);
 
@@ -413,13 +417,17 @@ function modifyRegion(node: Node) {
       // If an inherited Effector page leaks into this stack, `source: store`
       // reads can observe another retained instance via page.reg before they
       // ever touch scope.reg. Drop the page once we enter the model runtime.
-      if (!(stack.page as { "~modelsScopedPage"?: boolean } | null)?.["~modelsScopedPage"]) {
+      if (
+        !(stack.page as { '~modelsScopedPage'?: boolean } | null)?.[
+          '~modelsScopedPage'
+        ]
+      ) {
         stack.page = null;
       }
 
       const isSamePrimedContext =
-        stackMeta["~modelsPrimedModelId"] === context.current!.model["~id"] &&
-        stackMeta["~modelsPrimedInstance"] === context.current!.instance;
+        stackMeta['~modelsPrimedModelId'] === context.current!.model['~id'] &&
+        stackMeta['~modelsPrimedInstance'] === context.current!.instance;
 
       if (isSamePrimedContext) {
         return;
@@ -431,8 +439,8 @@ function modifyRegion(node: Node) {
       >;
       primeStoreScopes(context, scopeReg);
       syncReservedStores(scopeReg);
-      stackMeta["~modelsPrimedModelId"] = context.current!.model["~id"];
-      stackMeta["~modelsPrimedInstance"] = context.current!.instance;
+      stackMeta['~modelsPrimedModelId'] = context.current!.model['~id'];
+      stackMeta['~modelsPrimedInstance'] = context.current!.instance;
     }
   }
 
@@ -448,7 +456,7 @@ function modifyRegion(node: Node) {
         fn: (
           data: unknown,
           _scope: Record<string, unknown>,
-          stack: Stack & { "~modelsRuntimeCtx"?: RuntimeContext },
+          stack: Stack & { '~modelsRuntimeCtx'?: RuntimeContext },
         ): unknown => {
           const context = getRuntimeContext(stack);
 
@@ -463,19 +471,22 @@ function modifyRegion(node: Node) {
     );
 
     for (const link of effectNode.family.links) {
-      if (link.meta?.name === "done" || link.meta?.name === "fail") {
+      if (link.meta?.name === 'done' || link.meta?.name === 'fail') {
         link.seq.unshift(
           step.compute({
             fn: (
               data: unknown,
               _scope: Record<string, unknown>,
-              stack: Stack & { "~modelsRuntimeCtx"?: RuntimeContext },
+              stack: Stack & { '~modelsRuntimeCtx'?: RuntimeContext },
             ): unknown => {
               const payload = stack.value as { params?: unknown };
-              const context = shiftEffectContext(effectNode.id, payload?.params);
+              const context = shiftEffectContext(
+                effectNode.id,
+                payload?.params,
+              );
 
               if (context?.current) {
-                if ("result" in (payload ?? {})) {
+                if ('result' in (payload ?? {})) {
                   pushEffectResultContext(
                     effectNode.id,
                     (payload as { result?: unknown }).result,
@@ -483,7 +494,7 @@ function modifyRegion(node: Node) {
                   );
                 }
 
-                if ("error" in (payload ?? {})) {
+                if ('error' in (payload ?? {})) {
                   pushEffectResultContext(
                     effectNode.id,
                     (payload as { error?: unknown }).error,
@@ -503,16 +514,16 @@ function modifyRegion(node: Node) {
       }
 
       if (
-        link.meta?.name === "doneData" ||
-        link.meta?.name === "failData" ||
-        link.meta?.name === "finally"
+        link.meta?.name === 'doneData' ||
+        link.meta?.name === 'failData' ||
+        link.meta?.name === 'finally'
       ) {
         link.seq.unshift(
           step.compute({
             fn: (
               data: unknown,
               _scope: Record<string, unknown>,
-              stack: Stack & { "~modelsRuntimeCtx"?: RuntimeContext },
+              stack: Stack & { '~modelsRuntimeCtx'?: RuntimeContext },
             ): unknown => {
               const context = shiftEffectResultContext(
                 effectNode.id,
@@ -543,7 +554,7 @@ function modifyRegion(node: Node) {
         fn: (
           data: unknown,
           _scope: Record<string, unknown>,
-          stack: Stack & { "~modelsRuntimeCtx"?: RuntimeContext },
+          stack: Stack & { '~modelsRuntimeCtx'?: RuntimeContext },
         ): unknown => {
           const context = getRuntimeContext(stack);
 
@@ -561,18 +572,18 @@ function modifyRegion(node: Node) {
   }
 
   for (const link of collectRegionNodes(node).slice(1)) {
-    if ((link as any)["~reserved"]) {
+    if ((link as any)['~reserved']) {
       continue;
     }
 
     prependRuntimeStep(link);
 
-    if (link.meta?.op === "effect") {
+    if (link.meta?.op === 'effect') {
       patchEffectBridge(link);
     }
 
     for (const owner of link.family.owners) {
-      if (owner.meta?.op === "effect") {
+      if (owner.meta?.op === 'effect') {
         patchEffectBridge(owner);
       }
     }
@@ -601,7 +612,7 @@ export function bindRegionModel(region: Node, model: Model<any, any>): void {
   const regionNodes = new Set<Node>(regionTree);
 
   for (const link of regionTree.slice(1)) {
-    if ((link as any)["~reserved"] || broadcastPatchedNodes.has(link)) {
+    if ((link as any)['~reserved'] || broadcastPatchedNodes.has(link)) {
       continue;
     }
 
@@ -619,7 +630,7 @@ export function bindRegionModel(region: Node, model: Model<any, any>): void {
         fn: (
           _data: unknown,
           _scope: Record<string, unknown>,
-          stack: Stack & { "~modelsRuntimeCtx"?: RuntimeContext },
+          stack: Stack & { '~modelsRuntimeCtx'?: RuntimeContext },
         ): boolean => {
           const context = getRuntimeContext(stack);
 
@@ -627,9 +638,11 @@ export function bindRegionModel(region: Node, model: Model<any, any>): void {
             return true;
           }
 
-          const instances = (stack.scope
-            ? stack.scope.getState(model.$instances as any)
-            : model.$instances.getState()) as Record<string, unknown>;
+          const instances = (
+            stack.scope
+              ? stack.scope.getState(model.$instances as any)
+              : model.$instances.getState()
+          ) as Record<string, unknown>;
 
           if (Object.keys(instances).length === 0) {
             return false;

@@ -1,10 +1,10 @@
-import { is } from "effector";
-import { is as modelIs } from "../is";
-import type { Model, ModelApi } from "../models";
-import type { ModelLensApi } from "./types";
-import { createClock, createTarget } from "./dispatch";
-import { lens } from "./lens";
-import { expandInstancesWithAliases } from "../models/aliases";
+import { is } from 'effector';
+import { is as modelIs } from '../is';
+import type { Model, ModelApi } from '../models';
+import type { ModelLensApi } from './types';
+import { createClock, createTarget } from './dispatch';
+import { lens } from './lens';
+import { expandInstancesWithAliases } from '../models/aliases';
 
 function collectNestedInstances(
   parentInstances: Record<string, any>,
@@ -13,17 +13,19 @@ function collectNestedInstances(
   const result: Record<string, any> = {};
 
   for (const [parentId, parentInstance] of Object.entries(parentInstances)) {
-    const children = parentInstance?.["~children"]?.[nestedModel["~id"]] ?? {};
+    const children = parentInstance?.['~children']?.[nestedModel['~id']] ?? {};
     const childAliases =
-      parentInstance?.["~childAliases"]?.[nestedModel["~id"]] ?? {};
+      parentInstance?.['~childAliases']?.[nestedModel['~id']] ?? {};
     const childrenWithAliases = expandInstancesWithAliases(
       children,
       childAliases,
     );
 
-    for (const [childId, childInstance] of Object.entries(childrenWithAliases)) {
-      if (typeof childInstance === "object" && childInstance !== null) {
-        Object.defineProperty(childInstance, "~owner", {
+    for (const [childId, childInstance] of Object.entries(
+      childrenWithAliases,
+    )) {
+      if (typeof childInstance === 'object' && childInstance !== null) {
+        Object.defineProperty(childInstance, '~owner', {
           value: parentInstance,
           configurable: true,
           enumerable: false,
@@ -82,17 +84,17 @@ function createElementActions(
   if (modelIs.model(element)) {
     const nestedLens = lens(element);
 
-    (nestedLens as any)["~setSource"]?.({
+    (nestedLens as any)['~setSource']?.({
       source: element.$instances,
       getSource: (payload: any) =>
         collectNestedInstances(getInstances(payload), element),
     });
-    (nestedLens as any)["~setContextModelId"]?.(model["~id"]);
+    (nestedLens as any)['~setContextModelId']?.(model['~id']);
 
     return nestedLens;
   }
 
-  if (typeof element === "object" && element !== null) {
+  if (typeof element === 'object' && element !== null) {
     const result: Record<string, unknown> = {};
 
     for (const [key, nestedElement] of Object.entries(element)) {
@@ -123,8 +125,8 @@ export function createModelLensApi<T extends Model<any, ModelApi>>({
 }: ModelApiOptions<T>): ModelLensApi<T, any> {
   const api: any = {};
 
-  for (const key in model["~api"]) {
-    const element = model["~api"][key];
+  for (const key in model['~api']) {
+    const element = model['~api'][key];
 
     if (!element) {
       continue;

@@ -1,8 +1,8 @@
 export interface TSchema {}
 
 export interface TStatic<T> extends TSchema {
-  "~kind": "typed";
-  "~type": T;
+  '~kind': 'typed';
+  '~type': T;
 }
 
 export interface TNumber extends TStatic<number> {}
@@ -12,52 +12,52 @@ export interface TNull extends TStatic<null> {}
 export interface TVoid extends TStatic<void> {}
 
 export interface TRef<Name extends string> extends TSchema {
-  "~kind": "ref";
-  "~globals": Record<string, unknown>;
-  "~type": this["~globals"][Name];
+  '~kind': 'ref';
+  '~globals': Record<string, unknown>;
+  '~type': this['~globals'][Name];
 }
 
 export interface TArray<Item extends TSchema> extends TSchema {
-  "~kind": "array";
-  "~item": Item;
+  '~kind': 'array';
+  '~item': Item;
 }
 
 export interface TEnum<Values extends string[]> extends TSchema {
-  "~kind": "enum";
-  "~values": Values;
+  '~kind': 'enum';
+  '~values': Values;
 }
 
 export interface TRecord<
   Key extends string,
   Value extends TSchema,
 > extends TSchema {
-  "~kind": "record";
-  "~key": Key;
-  "~value": Value;
+  '~kind': 'record';
+  '~key': Key;
+  '~value': Value;
 }
 
 export type TObject<Shape extends Record<string, TSchema>> = TSchema & {
-  "~kind": "object";
-  "~shape": Shape;
+  '~kind': 'object';
+  '~shape': Shape;
 };
 
 export type TUnion<Variants extends TSchema[]> = TSchema & {
-  "~kind": "union";
-  "~variants": Variants;
+  '~kind': 'union';
+  '~variants': Variants;
 };
 
 export type TIntersect<Variants extends TSchema[]> = TSchema & {
-  "~kind": "intersect";
-  "~variants": Variants;
+  '~kind': 'intersect';
+  '~variants': Variants;
 };
 
 export type TFunction<
   Args extends TSchema[],
   Return extends TSchema,
 > = TSchema & {
-  "~kind": "function";
-  "~args": Args;
-  "~return": Return;
+  '~kind': 'function';
+  '~args': Args;
+  '~return': Return;
 };
 
 export type ExtractRefNames<T extends TSchema> =
@@ -65,7 +65,7 @@ export type ExtractRefNames<T extends TSchema> =
     ? Name
     : T extends TArray<infer Item>
       ? ExtractRefNames<Item>
-      : T extends TRecord<infer Key, infer Value>
+      : T extends TRecord<infer _Key, infer Value>
         ? ExtractRefNames<Value>
         : T extends TObject<infer Shape>
           ? ExtractRefNames<Shape[keyof Shape]>
@@ -81,8 +81,8 @@ export type UnsafeTCall<
   T extends TSchema,
   Globals extends Record<string, unknown>,
 > =
-  T extends TRef<infer Name>
-    ? T & { "~globals": Globals }
+  T extends TRef<infer _Name>
+    ? T & { '~globals': Globals }
     : T extends TArray<infer Item>
       ? TArray<UnsafeTCall<Item, Globals>>
       : T extends TRecord<infer Key, infer Value>
@@ -159,7 +159,7 @@ export type Static<T extends TSchema> =
   T extends TStatic<infer U>
     ? U
     : T extends TRef<any>
-      ? T["~type"]
+      ? T['~type']
       : T extends TArray<infer Item>
         ? Static<Item>[]
         : T extends TRecord<infer Key, infer Value>

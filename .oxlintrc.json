@@ -2,17 +2,17 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc"],
   "categories": {
-    "correctness": "error",
+    "correctness": "error"
   },
   "rules": {},
   "env": {
-    "builtin": true,
+    "builtin": true
   },
   "ignorePatterns": [
     ".agents/**",
     "**/dist/**",
     "**/node_modules/**",
     "**/docs/**",
-    "**/packages/forms/**",
+    "**/packages/forms/**"
   ]
 }

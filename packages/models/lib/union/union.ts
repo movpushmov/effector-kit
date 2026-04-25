@@ -1,5 +1,5 @@
-import type { Union, UnionMap } from "./types";
+import type { Union, UnionMap } from './types';
 
 export function union<T extends UnionMap>(map: T): Union<T> {
-  return { "~kind": "union", models: map };
+  return { '~kind': 'union', models: map };
 }

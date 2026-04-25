@@ -1,7 +1,7 @@
-import type { StoreWritable } from "effector";
-import { getContext } from "./context";
-import type { Model, BaseInstance } from "../models";
-import { createAction } from "effector-action";
+import type { StoreWritable } from 'effector';
+import { getContext } from './context';
+import type { Model, BaseInstance } from '../models';
+import { createAction } from 'effector-action';
 
 let entityIdCounter = 0;
 const reservedStores = new Set<StoreWritable<any>>();
@@ -40,13 +40,13 @@ function syncScopeStoreValue(
 export function modifyStore($store: StoreWritable<any>, key: string): void {
   const stateRef = ($store as any).graphite.meta.stateRef;
   let fallbackValue = stateRef.current;
-  Object.defineProperty(stateRef, "~fallbackCurrent", {
+  Object.defineProperty(stateRef, '~fallbackCurrent', {
     value: fallbackValue,
     configurable: true,
     writable: true,
   });
 
-  Object.defineProperty(stateRef, "current", {
+  Object.defineProperty(stateRef, 'current', {
     get() {
       const ctx = getContext();
 
@@ -58,7 +58,7 @@ export function modifyStore($store: StoreWritable<any>, key: string): void {
     },
     set(value) {
       fallbackValue = value;
-      stateRef["~fallbackCurrent"] = value;
+      stateRef['~fallbackCurrent'] = value;
 
       const ctx = getContext();
 
@@ -94,18 +94,18 @@ export function modifyRefsStore(
   reserve([$store]);
   const stateRef = ($store as any).graphite.meta.stateRef;
   let fallbackValue = stateRef.current;
-  Object.defineProperty(stateRef, "~fallbackCurrent", {
+  Object.defineProperty(stateRef, '~fallbackCurrent', {
     value: fallbackValue,
     configurable: true,
     writable: true,
   });
-  Object.defineProperty(stateRef, "~ownerModelId", {
+  Object.defineProperty(stateRef, '~ownerModelId', {
     value: ownerModelId,
     configurable: true,
     writable: true,
   });
 
-  Object.defineProperty(stateRef, "current", {
+  Object.defineProperty(stateRef, 'current', {
     get() {
       const ctx = getContext();
 
@@ -116,14 +116,14 @@ export function modifyRefsStore(
       const instance: BaseInstance =
         ctx.current.owner?.instance ?? ctx.current.instance;
 
-      if (!instance["~refs"]) {
-        instance["~refs"] = {};
+      if (!instance['~refs']) {
+        instance['~refs'] = {};
       }
-      return instance["~refs"][refId] ?? [];
+      return instance['~refs'][refId] ?? [];
     },
     set(value) {
       fallbackValue = value;
-      stateRef["~fallbackCurrent"] = value;
+      stateRef['~fallbackCurrent'] = value;
 
       const ctx = getContext();
 
@@ -134,11 +134,11 @@ export function modifyRefsStore(
       const instance: BaseInstance =
         ctx.current.owner?.instance ?? ctx.current.instance;
 
-      if (!instance["~refs"]) {
-        instance["~refs"] = {};
+      if (!instance['~refs']) {
+        instance['~refs'] = {};
       }
 
-      instance["~refs"][refId] = value;
+      instance['~refs'][refId] = value;
       syncScopeStoreValue($store, value, ctx.current.scope as any);
     },
   });
@@ -166,18 +166,18 @@ export function modifyChildStore(
   reserve([$store]);
   const stateRef = ($store as any).graphite.meta.stateRef;
   let fallbackValue = stateRef.current;
-  Object.defineProperty(stateRef, "~fallbackCurrent", {
+  Object.defineProperty(stateRef, '~fallbackCurrent', {
     value: fallbackValue,
     configurable: true,
     writable: true,
   });
-  Object.defineProperty(stateRef, "~ownerModelId", {
+  Object.defineProperty(stateRef, '~ownerModelId', {
     value: ownerModelId,
     configurable: true,
     writable: true,
   });
 
-  Object.defineProperty(stateRef, "current", {
+  Object.defineProperty(stateRef, 'current', {
     get() {
       const ctx = getContext();
 
@@ -188,15 +188,15 @@ export function modifyChildStore(
       const instance: BaseInstance =
         ctx.current.owner?.instance ?? ctx.current.instance;
 
-      if (!instance["~children"]) {
-        instance["~children"] = {};
+      if (!instance['~children']) {
+        instance['~children'] = {};
       }
 
-      return instance["~children"][model["~id"]] ?? {};
+      return instance['~children'][model['~id']] ?? {};
     },
     set(value) {
       fallbackValue = value;
-      stateRef["~fallbackCurrent"] = value;
+      stateRef['~fallbackCurrent'] = value;
 
       const ctx = getContext();
 
@@ -207,11 +207,11 @@ export function modifyChildStore(
       const instance: BaseInstance =
         ctx.current.owner?.instance ?? ctx.current.instance;
 
-      if (!instance["~children"]) {
-        instance["~children"] = {};
+      if (!instance['~children']) {
+        instance['~children'] = {};
       }
 
-      instance["~children"][model["~id"]] = value;
+      instance['~children'][model['~id']] = value;
       syncScopeStoreValue($store, value, ctx.current.scope as any);
     },
   });
@@ -239,18 +239,18 @@ export function modifyChildAliasesStore(
   reserve([$store]);
   const stateRef = ($store as any).graphite.meta.stateRef;
   let fallbackValue = stateRef.current;
-  Object.defineProperty(stateRef, "~fallbackCurrent", {
+  Object.defineProperty(stateRef, '~fallbackCurrent', {
     value: fallbackValue,
     configurable: true,
     writable: true,
   });
-  Object.defineProperty(stateRef, "~ownerModelId", {
+  Object.defineProperty(stateRef, '~ownerModelId', {
     value: ownerModelId,
     configurable: true,
     writable: true,
   });
 
-  Object.defineProperty(stateRef, "current", {
+  Object.defineProperty(stateRef, 'current', {
     get() {
       const ctx = getContext();
 
@@ -261,15 +261,15 @@ export function modifyChildAliasesStore(
       const instance: BaseInstance =
         ctx.current.owner?.instance ?? ctx.current.instance;
 
-      if (!instance["~childAliases"]) {
-        instance["~childAliases"] = {};
+      if (!instance['~childAliases']) {
+        instance['~childAliases'] = {};
       }
 
-      return instance["~childAliases"][model["~id"]] ?? {};
+      return instance['~childAliases'][model['~id']] ?? {};
     },
     set(value) {
       fallbackValue = value;
-      stateRef["~fallbackCurrent"] = value;
+      stateRef['~fallbackCurrent'] = value;
 
       const ctx = getContext();
 
@@ -280,11 +280,11 @@ export function modifyChildAliasesStore(
       const instance: BaseInstance =
         ctx.current.owner?.instance ?? ctx.current.instance;
 
-      if (!instance["~childAliases"]) {
-        instance["~childAliases"] = {};
+      if (!instance['~childAliases']) {
+        instance['~childAliases'] = {};
       }
 
-      instance["~childAliases"][model["~id"]] = value;
+      instance['~childAliases'][model['~id']] = value;
       syncScopeStoreValue($store, value, ctx.current.scope as any);
     },
   });
@@ -306,14 +306,14 @@ export function modifyChildAliasesStore(
 
 export function reserve(units: object[]): void {
   for (const unit of units) {
-    Object.defineProperty(unit, "~reserved", {
+    Object.defineProperty(unit, '~reserved', {
       value: true,
     });
 
     if (
-      typeof unit === "object" &&
+      typeof unit === 'object' &&
       unit !== null &&
-      "graphite" in unit &&
+      'graphite' in unit &&
       (unit as any).graphite?.meta?.stateRef
     ) {
       reservedStores.add(unit as unknown as StoreWritable<any>);
@@ -328,12 +328,12 @@ export function syncReservedStores(
     const rootId = ($store as any).graphite.meta.rootStateRefId;
     const stateRef = ($store as any).graphite.meta.stateRef;
     const ctx = getContext();
-    const ownerModelId = stateRef["~ownerModelId"];
+    const ownerModelId = stateRef['~ownerModelId'];
     const currentValue =
-      ctx.current && ownerModelId && ctx.current.model["~id"] === ownerModelId
+      ctx.current && ownerModelId && ctx.current.model['~id'] === ownerModelId
         ? stateRef.current
-        : stateRef["~fallbackCurrent"] !== undefined
-          ? stateRef["~fallbackCurrent"]
+        : stateRef['~fallbackCurrent'] !== undefined
+          ? stateRef['~fallbackCurrent']
           : stateRef.current;
 
     if (!scopeReg[rootId]) {

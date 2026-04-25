@@ -1,5 +1,5 @@
-import type { LensPredicate } from "./types";
-import { dedupeInstances } from "../models/aliases";
+import type { LensPredicate } from './types';
+import { dedupeInstances } from '../models/aliases';
 
 type BaseSourceGetter = (payload: any) => Record<string, any>;
 

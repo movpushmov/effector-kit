@@ -7,8 +7,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": [
-    "@effector-kit/forms",
-    "@effector-kit/inspector"
-  ]
+  "ignore": ["@effector-kit/forms", "@effector-kit/inspector"]
 }

@@ -1,30 +1,29 @@
-import type { Model } from "../models";
+import type { Model } from '../models';
 import type {
   ExtractRefNames,
   Static,
-  TCall,
   TSchema,
   UnsafeTCall,
-} from "../type-schema";
+} from '../type-schema';
 
 export interface StoreElement<Schema extends TSchema> {
-  "~kind": "store";
-  defaultValue: this["~type"];
-  "~type": Static<Schema>;
+  '~kind': 'store';
+  defaultValue: this['~type'];
+  '~type': Static<Schema>;
 }
 
 export interface EventElement<Schema extends TSchema> {
-  "~kind": "event";
-  "~type": Static<Schema>;
+  '~kind': 'event';
+  '~type': Static<Schema>;
 }
 
 export type ChildElement<T extends Model<any, any> = any> = {
-  "~kind": "child";
+  '~kind': 'child';
   model: T;
 };
 
 export type RefElement<T extends Model<any, any> = any> = {
-  "~kind": "ref";
+  '~kind': 'ref';
   model: T;
 };
 
@@ -62,7 +61,7 @@ export interface Contract<
   T extends Shape,
   Generics extends ExtractGenericsFromShape<T> = ExtractGenericsFromShape<T>,
 > {
-  "~kind": "contract";
+  '~kind': 'contract';
   shape: CallShape<T, Generics>;
 
   withGeneric<NewGenerics extends ExtractGenericsFromShape<T>>(): Contract<

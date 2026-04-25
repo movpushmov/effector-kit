@@ -22,7 +22,7 @@ pnpm add @effector-kit/react @effector-kit/models effector-react effector react
 Creates a managed instance on mount and deletes it on unmount.
 
 ```tsx
-import { useModel } from "@effector-kit/react";
+import { useModel } from '@effector-kit/react';
 
 function CounterScreen() {
   const counter = useModel(counterModel);
@@ -54,7 +54,7 @@ function ChatScreen({ chatId }: { chatId: string }) {
   const chat = useModel(chatModel, {
     id: chatId,
     data: {
-      title: "New chat",
+      title: 'New chat',
     },
     retain: true,
   });
@@ -71,13 +71,13 @@ If an alias resolves to an existing instance, `useModel` returns that instance w
 
 ```tsx
 chatModel.addAlias({
-  aliasId: "route-chat-id",
-  instanceId: "server-chat-id",
+  aliasId: 'route-chat-id',
+  instanceId: 'server-chat-id',
 });
 
 function ChatScreen() {
   const chat = useModel(chatModel, {
-    id: "route-chat-id",
+    id: 'route-chat-id',
     retain: true,
   });
 
@@ -93,12 +93,12 @@ Returns already existing instances selected by the lens.
 function PositiveCounters() {
   const counters = useModel(
     counterModel,
-    counterModel.lens.where((entity) => entity.count > 0),
+    counterModel.lens.where(entity => entity.count > 0),
   );
 
   return (
     <ul>
-      {counters.map((counter) => (
+      {counters.map(counter => (
         <li key={counter.id}>{counter.count}</li>
       ))}
     </ul>
@@ -158,14 +158,14 @@ That means this works directly:
 ```tsx
 function Dashboard() {
   const dashboard = useModel(dashboardModel, {
-    data: { title: "Main" },
+    data: { title: 'Main' },
   });
 
   return (
     <div>
       <h1>{dashboard.title}</h1>
-      <div>{dashboard.selected.map((item) => item.count).join(",")}</div>
-      <button onClick={() => dashboard.track("counter-1")} type="button">
+      <div>{dashboard.selected.map(item => item.count).join(',')}</div>
+      <button onClick={() => dashboard.track('counter-1')} type="button">
         Track
       </button>
     </div>
@@ -192,8 +192,8 @@ function SettingsScreen() {
 `useModel` reads the current scope from `effector-react` `Provider`.
 
 ```tsx
-import { Provider } from "effector-react";
-import { fork } from "effector";
+import { Provider } from 'effector-react';
+import { fork } from 'effector';
 
 const scope = fork();
 
@@ -209,9 +209,9 @@ root.render(
 `component(...)` creates a React component on top of an `@effector-kit/models` model.
 
 ```tsx
-import { createEvent, sample } from "effector";
-import { component } from "@effector-kit/react";
-import { contract, define, type TNumber } from "@effector-kit/models";
+import { createEvent, sample } from 'effector';
+import { component } from '@effector-kit/react';
+import { contract, define, type TNumber } from '@effector-kit/models';
 
 const Counter = component({
   contract: contract({
@@ -226,11 +226,11 @@ const Counter = component({
     });
 
     mounted.watch(() => {
-      console.log("mounted");
+      console.log('mounted');
     });
 
     unmounted.watch(() => {
-      console.log("unmounted");
+      console.log('unmounted');
     });
 
     return {
@@ -309,25 +309,25 @@ contract.
 - every other prop is forwarded to `mounted`
 
 ```tsx
-import { type Event } from "effector";
-import { component } from "@effector-kit/react";
+import { type Event } from 'effector';
+import { component } from '@effector-kit/react';
 import {
   contract,
   define,
   type TBoolean,
   type TString,
-} from "@effector-kit/models";
+} from '@effector-kit/models';
 
 const Todo = component({
   contract: contract({
-    title: define.store(define.schema<TString>(), ""),
+    title: define.store(define.schema<TString>(), ''),
     done: define.store(define.schema<TBoolean>(), false),
   })(),
   model: (
     { title, done },
     mounted: Event<{ userId: string; roomId: string }>,
   ) => {
-    mounted.watch((payload) => {
+    mounted.watch(payload => {
       console.log(payload.userId, payload.roomId);
     });
 
@@ -391,13 +391,13 @@ Use this when a parent has exactly one owned child model and you do not want to 
 Typical example: one page and one dialog.
 
 ```tsx
-import { createEvent, sample } from "effector";
-import { component } from "@effector-kit/react";
-import { contract, define, type TString } from "@effector-kit/models";
+import { createEvent, sample } from 'effector';
+import { component } from '@effector-kit/react';
+import { contract, define, type TString } from '@effector-kit/models';
 
 const Page = component({
   contract: contract({
-    title: define.store(define.schema<TString>(), ""),
+    title: define.store(define.schema<TString>(), ''),
   })(),
   model: ({ title }) => {
     const dialog = Dialog.create({ opened: false });
@@ -462,13 +462,13 @@ This is the right fit for things like:
 `Component.model` is a normal model, so it is the main composition surface for parent-child modeling.
 
 ```tsx
-import { createEvent, sample } from "effector";
-import { component } from "@effector-kit/react";
-import { child, contract, define, type TString } from "@effector-kit/models";
+import { createEvent, sample } from 'effector';
+import { component } from '@effector-kit/react';
+import { child, contract, define, type TString } from '@effector-kit/models';
 
 const Dashboard = component({
   contract: contract({
-    title: define.store(define.schema<TString>(), ""),
+    title: define.store(define.schema<TString>(), ''),
   })(),
   model: ({ title }) => {
     const cards = child(Counter.model);
@@ -488,9 +488,9 @@ const Dashboard = component({
   view: ({ title, cards, onCreateCard }) => (
     <div>
       <h1>{title}</h1>
-      <div>{cards.map((card) => card.count).join(",")}</div>
+      <div>{cards.map(card => card.count).join(',')}</div>
       <button
-        onClick={() => onCreateCard({ id: "a", data: { count: 1 } })}
+        onClick={() => onCreateCard({ id: 'a', data: { count: 1 } })}
         type="button"
       >
         Add card
@@ -505,13 +505,13 @@ const Dashboard = component({
 The current API supports generic contracts and components through a factory function.
 
 ```tsx
-import { sample } from "effector";
-import { component } from "@effector-kit/react";
-import { contract, define, type TRef } from "@effector-kit/models";
+import { sample } from 'effector';
+import { component } from '@effector-kit/react';
+import { contract, define, type TRef } from '@effector-kit/models';
 
 const makeValueContract = contract({
-  value: define.store(define.schema<TRef<"Value">>(), "" as never),
-  change: define.event(define.schema<TRef<"Value">>()),
+  value: define.store(define.schema<TRef<'Value'>>(), '' as never),
+  change: define.event(define.schema<TRef<'Value'>>()),
 });
 
 function createValueComponent<Value extends string>() {
@@ -529,7 +529,7 @@ function createValueComponent<Value extends string>() {
       };
     },
     view: ({ value, onChange }) => (
-      <button onClick={() => onChange("updated" as Value)} type="button">
+      <button onClick={() => onChange('updated' as Value)} type="button">
         {value}
       </button>
     ),

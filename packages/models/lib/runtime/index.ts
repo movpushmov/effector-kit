@@ -1,12 +1,12 @@
-export { bindRegionModel, modifyDeclarations } from "./inspector";
+export { bindRegionModel, modifyDeclarations } from './inspector';
 export {
   setContext,
   getContext,
   setTarget,
   getDeclarationModelId,
   setDeclarationModelId,
-} from "./context";
-export { withInstanceContext } from "./with-instance-context";
+} from './context';
+export { withInstanceContext } from './with-instance-context';
 export {
   modifyStore,
   modifyChildAliasesStore,
@@ -15,4 +15,4 @@ export {
   reserve,
   getEntityId,
   syncReservedStores,
-} from "./api";
+} from './api';

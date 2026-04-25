@@ -1,4 +1,4 @@
-export { contract } from "./contracts";
+export { contract } from './contracts';
 export type {
   StoreElement,
   EventElement,
@@ -7,4 +7,4 @@ export type {
   ShapeElement,
   Shape,
   Contract,
-} from "./types";
+} from './types';

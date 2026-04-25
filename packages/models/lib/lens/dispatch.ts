@@ -6,20 +6,20 @@ import {
   sample,
   type Event,
   type EventCallable,
-} from "effector";
-import type { Model } from "../models";
+} from 'effector';
+import type { Model } from '../models';
 import {
   getContext,
   modifyDeclarations,
   setContext,
   setTarget,
-} from "../runtime";
+} from '../runtime';
 
 function includesInstance(
   instances: Record<string | number, any>,
   instance: any,
 ): boolean {
-  return Object.values(instances).some((value) => value === instance);
+  return Object.values(instances).some(value => value === instance);
 }
 
 export function createClock(
@@ -33,7 +33,7 @@ export function createClock(
 
     sample({
       clock: element,
-      filter: (payload) => {
+      filter: payload => {
         const ctx = getContext();
 
         if (!ctx.current) {
@@ -41,7 +41,7 @@ export function createClock(
         }
 
         const sourceContext =
-          ctx.current.model["~id"] === getContextModelId() ? ctx : {};
+          ctx.current.model['~id'] === getContextModelId() ? ctx : {};
         setContext(sourceContext);
         const instances = getInstances(payload);
         setContext(ctx);
@@ -81,14 +81,14 @@ export function createTarget(
         context: ReturnType<typeof getContext>;
       }) => {
         const sourceContext =
-          context.current?.model["~id"] === getContextModelId() ? context : {};
+          context.current?.model['~id'] === getContextModelId() ? context : {};
         setContext(sourceContext);
         const instances = getInstances(props);
         const shouldResetStaleContext = Boolean(
           context.current &&
-            context.current.model["~id"] !== getContextModelId() &&
-            Object.keys(instances).length > 0 &&
-            !includesInstance(instances, context.current.instance),
+          context.current.model['~id'] !== getContextModelId() &&
+          Object.keys(instances).length > 0 &&
+          !includesInstance(instances, context.current.instance),
         );
         const baseContext = shouldResetStaleContext ? {} : context;
         const baseCurrent = baseContext.current;
@@ -152,7 +152,7 @@ export function createTarget(
 
     sample({
       clock: target,
-      fn: (payload) => ({
+      fn: payload => ({
         payload: map ? map(payload) : payload,
         props: payload,
         context: getContext(),

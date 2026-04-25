@@ -10,7 +10,7 @@ import {
   type Ref,
   type SingleLens,
   withInstanceContext,
-} from "@effector-kit/models";
+} from '@effector-kit/models';
 import {
   allSettled,
   createEvent,
@@ -25,7 +25,7 @@ import {
   type Scope,
   type Store,
   type StoreWritable,
-} from "effector";
+} from 'effector';
 import type {
   ComponentCreateOptions,
   CreatedModel,
@@ -34,12 +34,12 @@ import type {
   ComponentViewEntity,
   ReactModelEntity,
   ReactModelHandle,
-} from "./types";
-import { reactCreatedModelMeta } from "./meta";
+} from './types';
+import { reactCreatedModelMeta } from './meta';
 
 let reactModelId = 0;
 let reactLaunchPageId = 0;
-const resolvedViewEntityMarker = Symbol("resolvedViewEntity");
+const resolvedViewEntityMarker = Symbol('resolvedViewEntity');
 const graphUpdatesCache = new WeakMap<
   AnyModel,
   ReadonlyArray<Event<unknown>>
@@ -51,7 +51,7 @@ type InstancesMap = Record<string, InstanceData>;
 type AliasesMap = Record<string, string>;
 type UnionRefInstance = { key: string; id: string };
 type EffectorStore = Store<unknown> & {
-  "~field"?: string;
+  '~field'?: string;
 };
 type StateRefStep = {
   type?: string;
@@ -82,7 +82,7 @@ function capitalize(value: string) {
 }
 
 function normalizeViewKey(key: string) {
-  return key.startsWith("$") ? key.slice(1) : key;
+  return key.startsWith('$') ? key.slice(1) : key;
 }
 
 function toViewHandlerName(key: string) {
@@ -90,10 +90,12 @@ function toViewHandlerName(key: string) {
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
-function isTraversableApiObject(value: unknown): value is Record<string, unknown> {
+function isTraversableApiObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return (
     isObject(value) &&
     !effectorIs.store(value) &&
@@ -104,7 +106,7 @@ function isTraversableApiObject(value: unknown): value is Record<string, unknown
 }
 
 function isLens(value: unknown): value is Lens<Model<any, any>> {
-  return isObject(value) && typeof value.getSource === "function";
+  return isObject(value) && typeof value.getSource === 'function';
 }
 
 function isSingleLens<T extends Model<any, any>>(
@@ -112,8 +114,8 @@ function isSingleLens<T extends Model<any, any>>(
 ): value is SingleLens<T> {
   return (
     isObject(value) &&
-    typeof value.getSource === "function" &&
-    value["~single"] === true
+    typeof value.getSource === 'function' &&
+    value['~single'] === true
   );
 }
 
@@ -146,21 +148,23 @@ function isDefined<T>(value: T | null | undefined): value is T {
 }
 
 function hasDerivedStateRef(store: Store<unknown>): boolean {
-  const stateRef = (store as Store<unknown> & {
-    graphite?: {
-      meta?: {
-        stateRef?: {
-          before?: unknown[];
+  const stateRef = (
+    store as Store<unknown> & {
+      graphite?: {
+        meta?: {
+          stateRef?: {
+            before?: unknown[];
+          };
         };
       };
-    };
-  }).graphite?.meta?.stateRef;
+    }
+  ).graphite?.meta?.stateRef;
 
   return Array.isArray(stateRef?.before) && stateRef.before.length > 0;
 }
 
 function isComponentInternalKey(key: string) {
-  return key.startsWith("$$");
+  return key.startsWith('$$');
 }
 
 function callUnit<Unit extends { (payload?: any): any }>(
@@ -227,8 +231,8 @@ function launchUnit(unit: unknown, payload: unknown, scope?: Scope) {
 function isStateRefShape(value: unknown): value is StateRefShape {
   return (
     isObject(value) &&
-    "current" in value &&
-    (typeof value.id === "string" || Array.isArray(value.before))
+    'current' in value &&
+    (typeof value.id === 'string' || Array.isArray(value.before))
   );
 }
 
@@ -238,7 +242,7 @@ function evaluateStateRefValue(
   seen: Set<StateRefShape> = new Set<StateRefShape>(),
 ): unknown {
   const overrideValue =
-    typeof stateRef.id === "string" && overrides?.has(stateRef.id)
+    typeof stateRef.id === 'string' && overrides?.has(stateRef.id)
       ? overrides.get(stateRef.id)
       : undefined;
 
@@ -248,14 +252,14 @@ function evaluateStateRefValue(
 
   seen.add(stateRef);
 
-  if (stateRef.type === "list") {
+  if (stateRef.type === 'list') {
     if (!Array.isArray(stateRef.before) || stateRef.before.length === 0) {
       const fallback = overrideValue ?? stateRef.current;
 
       return Array.isArray(fallback) ? fallback : [];
     }
 
-    return stateRef.before.map((step) =>
+    return stateRef.before.map(step =>
       step.from ? evaluateStateRefValue(step.from, overrides, seen) : undefined,
     );
   }
@@ -264,11 +268,11 @@ function evaluateStateRefValue(
     return overrideValue ?? stateRef.current;
   }
 
-  if (stateRef.type === "shape") {
+  if (stateRef.type === 'shape') {
     const template =
-      stateRef.current && typeof stateRef.current === "object"
+      stateRef.current && typeof stateRef.current === 'object'
         ? (stateRef.current as Record<string, unknown>)
-        : stateRef.initial && typeof stateRef.initial === "object"
+        : stateRef.initial && typeof stateRef.initial === 'object'
           ? (stateRef.initial as Record<string, unknown>)
           : {};
     const keys = Object.keys(template);
@@ -276,7 +280,9 @@ function evaluateStateRefValue(
     return Object.fromEntries(
       stateRef.before.map((step, index) => [
         keys[index] ?? String(index),
-        step.from ? evaluateStateRefValue(step.from, overrides, seen) : undefined,
+        step.from
+          ? evaluateStateRefValue(step.from, overrides, seen)
+          : undefined,
       ]),
     );
   }
@@ -299,33 +305,37 @@ function collectLaunchPageStateOverrides(
   scope?: Scope,
 ): Map<string, unknown> {
   const overrides = new Map<string, unknown>();
-  const scopeReg = (scope as
-    | (Scope & { reg?: Record<string, { current: unknown }> })
-    | undefined)?.reg;
+  const scopeReg = (
+    scope as
+      | (Scope & { reg?: Record<string, { current: unknown }> })
+      | undefined
+  )?.reg;
 
   for (const store of collectGraphStores(model)) {
-    const meta = (store as StoreWritable<unknown> & {
-      graphite?: {
-        meta?: {
-          rootStateRefId?: string;
-          stateRef?: StateRefShape;
+    const meta = (
+      store as StoreWritable<unknown> & {
+        graphite?: {
+          meta?: {
+            rootStateRefId?: string;
+            stateRef?: StateRefShape;
+          };
         };
-      };
-    }).graphite?.meta;
+      }
+    ).graphite?.meta;
 
     if (!meta?.stateRef) {
       continue;
     }
 
-    const field = (store as EffectorStore)["~field"];
+    const field = (store as EffectorStore)['~field'];
     const rootId = meta.rootStateRefId;
     const stateRefId =
-      typeof meta.stateRef.id === "string" ? meta.stateRef.id : undefined;
+      typeof meta.stateRef.id === 'string' ? meta.stateRef.id : undefined;
 
     let hasValue = false;
     let value: unknown;
 
-    if (typeof field === "string" && field in instance) {
+    if (typeof field === 'string' && field in instance) {
       value = instance[field];
       hasValue = true;
     } else if (rootId && scopeReg?.[rootId]) {
@@ -396,7 +406,9 @@ function collectRegionNodes(root: Node): Node[] {
   return nodes;
 }
 
-function collectLaunchPageRefDescriptors(model: AnyModel): LaunchPageRefDescriptor[] {
+function collectLaunchPageRefDescriptors(
+  model: AnyModel,
+): LaunchPageRefDescriptor[] {
   const cached = launchPageRefsCache.get(model);
 
   if (cached) {
@@ -412,12 +424,11 @@ function collectLaunchPageRefDescriptors(model: AnyModel): LaunchPageRefDescript
   >();
 
   function rememberStateRef(ref: unknown, alias?: string): void {
-    if (!isStateRefShape(ref) || typeof ref.id !== "string") {
+    if (!isStateRefShape(ref) || typeof ref.id !== 'string') {
       return;
     }
 
-    const hasDerivedInputs =
-      Array.isArray(ref.before) && ref.before.length > 0;
+    const hasDerivedInputs = Array.isArray(ref.before) && ref.before.length > 0;
 
     if (!alias && !hasDerivedInputs) {
       return;
@@ -448,14 +459,16 @@ function collectLaunchPageRefDescriptors(model: AnyModel): LaunchPageRefDescript
   }
 
   for (const store of collectGraphStores(model)) {
-    const meta = (store as StoreWritable<unknown> & {
-      graphite?: {
-        meta?: {
-          rootStateRefId?: string;
-          stateRef?: StateRefShape;
+    const meta = (
+      store as StoreWritable<unknown> & {
+        graphite?: {
+          meta?: {
+            rootStateRefId?: string;
+            stateRef?: StateRefShape;
+          };
         };
-      };
-    }).graphite?.meta;
+      }
+    ).graphite?.meta;
 
     if (!meta?.stateRef) {
       continue;
@@ -464,14 +477,14 @@ function collectLaunchPageRefDescriptors(model: AnyModel): LaunchPageRefDescript
     rememberStateRef(meta.stateRef, meta.rootStateRefId);
   }
 
-  const region = (model as AnyModel & { "~region"?: Node })["~region"];
+  const region = (model as AnyModel & { '~region'?: Node })['~region'];
   const regionNodes = region ? collectRegionNodes(region) : [];
 
   for (const node of regionNodes) {
     for (const step of node.seq) {
       const data = step.data;
 
-      if (!isObject(data) || !("store" in data)) {
+      if (!isObject(data) || !('store' in data)) {
         continue;
       }
 
@@ -513,7 +526,7 @@ function createScopedLaunchPage(
     fullID: `react-launch-page-${reactLaunchPageId}`,
     parent: null,
     reg,
-    "~modelsScopedPage": true,
+    '~modelsScopedPage': true,
   };
 }
 
@@ -602,11 +615,11 @@ function collectPreviewInstanceData(
 
     if (effectorIs.store(value)) {
       const store = value as EffectorStore;
-      const field = store["~field"];
+      const field = store['~field'];
 
       if (
         (store as StoreWritable<unknown>).targetable === true &&
-        typeof field === "string" &&
+        typeof field === 'string' &&
         !(field in target)
       ) {
         try {
@@ -653,9 +666,9 @@ function readFieldValue(
         return instance[key];
       }
 
-      const field = store["~field"];
+      const field = store['~field'];
 
-      if (typeof field === "string" && field in instance) {
+      if (typeof field === 'string' && field in instance) {
         return instance[field];
       }
 
@@ -698,7 +711,7 @@ function bindUnit(
   unit: unknown,
   scope?: Scope,
 ) {
-  if (typeof unit === "function") {
+  if (typeof unit === 'function') {
     return (payload?: unknown) =>
       withInstanceContext(
         model,
@@ -741,11 +754,11 @@ function resolveRefValue(
     () => refModel.$ids.getState(),
     scope,
   ) as Array<string> | Array<UnionRefInstance>;
-  const target = refModel["~target"];
+  const target = refModel['~target'];
 
   if (modelIs.model(target)) {
     return (ids as string[])
-      .map((id) => {
+      .map(id => {
         const data = getModelInstance(target, id, scope);
 
         if (!data) {
@@ -759,7 +772,7 @@ function resolveRefValue(
 
   if (modelIs.union(target)) {
     return (ids as UnionRefInstance[])
-      .map((item) => {
+      .map(item => {
         const variantModel = target.models[item.key];
 
         if (!variantModel) {
@@ -809,12 +822,12 @@ function collectGraphStoresFromElement(
   if (isRef(element)) {
     const stores: Store<unknown>[] = [];
 
-    if (!seenRefs.has(element["~id"])) {
-      seenRefs.add(element["~id"]);
+    if (!seenRefs.has(element['~id'])) {
+      seenRefs.add(element['~id']);
       stores.push(element.$ids as unknown as Store<unknown>);
     }
 
-    const target = element["~target"];
+    const target = element['~target'];
 
     if (modelIs.model(target)) {
       stores.push(...collectGraphStores(target, seenModels, seenRefs));
@@ -828,7 +841,7 @@ function collectGraphStoresFromElement(
   }
 
   if (isObject(element)) {
-    return Object.values(element).flatMap((value) =>
+    return Object.values(element).flatMap(value =>
       collectGraphStoresFromElement(value, seenModels, seenRefs),
     );
   }
@@ -851,7 +864,7 @@ function collectCreatedModelChangeEventsFromElement(
   }
 
   if (isTraversableApiObject(element)) {
-    return Object.values(element).flatMap((value) =>
+    return Object.values(element).flatMap(value =>
       collectCreatedModelChangeEventsFromElement(value, seenCreated),
     );
   }
@@ -906,7 +919,7 @@ function collectCreatedModelProxyUpdatesFromElement(
   }
 
   if (isTraversableApiObject(element)) {
-    return Object.values(element).flatMap((value) =>
+    return Object.values(element).flatMap(value =>
       collectCreatedModelProxyUpdatesFromElement(value, seenCreated),
     );
   }
@@ -917,7 +930,7 @@ function collectCreatedModelProxyUpdatesFromElement(
 export function collectCreatedModelChangeEvents(
   model: AnyModel,
 ): Event<unknown>[] {
-  return Object.values(model["~api"]).flatMap((element) =>
+  return Object.values(model['~api']).flatMap(element =>
     collectCreatedModelChangeEventsFromElement(element),
   );
 }
@@ -925,7 +938,7 @@ export function collectCreatedModelChangeEvents(
 export function collectCreatedModelProxyUpdates(
   model: AnyModel,
 ): Event<unknown>[] {
-  return Object.values(model["~api"]).flatMap((element) =>
+  return Object.values(model['~api']).flatMap(element =>
     collectCreatedModelProxyUpdatesFromElement(element),
   );
 }
@@ -937,13 +950,13 @@ export function collectGraphStores(
 ): Store<unknown>[] {
   const stores: Array<Store<unknown>> = [model.$instances, model.$aliases];
 
-  if (seenModels.has(model["~id"])) {
+  if (seenModels.has(model['~id'])) {
     return stores;
   }
 
-  seenModels.add(model["~id"]);
+  seenModels.add(model['~id']);
 
-  for (const element of Object.values(model["~api"])) {
+  for (const element of Object.values(model['~api'])) {
     stores.push(
       ...collectGraphStoresFromElement(element, seenModels, seenRefs),
     );
@@ -959,7 +972,7 @@ export function collectGraphUpdates(model: AnyModel): Event<unknown>[] {
     return cached;
   }
 
-  const updates = collectGraphStores(model).map((store) => store.updates);
+  const updates = collectGraphStores(model).map(store => store.updates);
   graphUpdatesCache.set(model, updates);
 
   return updates;
@@ -975,7 +988,7 @@ function createOwnedHandle<T extends AnyModel>(
   meta: CreatedModelMeta<T>,
 ): ReactModelHandle<T> {
   return {
-    "~kind": "react-model",
+    '~kind': 'react-model',
     id: meta.ownedId,
     model: meta.ownedModel,
     data: meta.handle.data,
@@ -1072,14 +1085,7 @@ function resolveElementValue(
   }
 
   if (effectorIs.store(element)) {
-    return readFieldValue(
-      model,
-      instance,
-      key,
-      element,
-      scope,
-      useScopedState,
-    );
+    return readFieldValue(model, instance, key, element, scope, useScopedState);
   }
 
   if (effectorIs.event(element) || effectorIs.effect(element)) {
@@ -1119,7 +1125,7 @@ export function resolveEntity<T extends Model<any, any>>(
 ): ReactModelEntity<T> {
   const result: Record<string, unknown> = { id };
 
-  for (const [key, element] of Object.entries(model["~api"])) {
+  for (const [key, element] of Object.entries(model['~api'])) {
     if (isComponentInternalKey(key)) {
       continue;
     }
@@ -1234,13 +1240,14 @@ export function createHandlePreviewInstance<T extends Model<any, any>>(
   const localStoreDefaults =
     (
       handle.model as T & {
-        ["~localStoreDefaults"]?: InstanceData;
+        ['~localStoreDefaults']?: InstanceData;
       }
-    )["~localStoreDefaults"] ?? {};
+    )['~localStoreDefaults'] ?? {};
 
-  return collectPreviewInstanceData(handle.model["~api"], {
+  return collectPreviewInstanceData(handle.model['~api'], {
     ...localStoreDefaults,
-    ...(createModelPayload(handle.model, handle).data as unknown as InstanceData),
+    ...(createModelPayload(handle.model, handle)
+      .data as unknown as InstanceData),
   });
 }
 
@@ -1248,9 +1255,9 @@ export function getDefaultData<T extends Contract<any>>(contract: T) {
   const data: Record<string, unknown> = {};
 
   for (const [key, element] of Object.entries(contract.shape) as Array<
-    [string, T["shape"][keyof T["shape"]]]
+    [string, T['shape'][keyof T['shape']]]
   >) {
-    if (element["~kind"] !== "store") {
+    if (element['~kind'] !== 'store') {
       continue;
     }
 
@@ -1262,11 +1269,11 @@ export function getDefaultData<T extends Contract<any>>(contract: T) {
 
 export function createReactModelHandle<T extends Model<any, any>>(
   model: T,
-  data?: Partial<ContractData<T["~contract"]>>,
+  data?: Partial<ContractData<T['~contract']>>,
   options?: ComponentCreateOptions,
 ): ReactModelHandle<T> {
   return {
-    "~kind": "react-model",
+    '~kind': 'react-model',
     id: options?.id ?? nextReactModelId(),
     model,
     data: data ?? {},
@@ -1279,9 +1286,9 @@ function getCreatedStoreDefault<T extends AnyModel>(
   key: string,
   unit: Store<unknown>,
 ) {
-  const contractElement = meta.ownedModel["~contract"].shape[key];
+  const contractElement = meta.ownedModel['~contract'].shape[key];
 
-  if (contractElement?.["~kind"] === "store") {
+  if (contractElement?.['~kind'] === 'store') {
     return (
       meta.handle.data[key as keyof typeof meta.handle.data] ??
       contractElement.defaultValue
@@ -1301,13 +1308,13 @@ function createCreatedEventUnit<T extends AnyModel>(
   meta: CreatedModelMeta<T>,
   path: string[],
 ) {
-  const target = getApiElementByPath(meta.ownedModel["~api"], path);
+  const target = getApiElementByPath(meta.ownedModel['~api'], path);
 
-  if (typeof target !== "function") {
+  if (typeof target !== 'function') {
     return undefined;
   }
 
-  return createEffect<unknown, void>((payload) => {
+  return createEffect<unknown, void>(payload => {
     const owner = getCurrentOwnerContext();
 
     if (!owner) {
@@ -1338,17 +1345,20 @@ function createCreatedStoreUnit<T extends AnyModel>(
   unit: Store<unknown>,
 ) {
   const key = path[path.length - 1]!;
-  const ownedStoreCandidate = getApiElementByPath(meta.ownedModel["~api"], path);
+  const ownedStoreCandidate = getApiElementByPath(
+    meta.ownedModel['~api'],
+    path,
+  );
   const ownedStore = effectorIs.store(ownedStoreCandidate)
     ? (ownedStoreCandidate as Store<unknown>)
     : unit;
   const defaultValue = getCreatedStoreDefault(meta, key, unit);
   const proxy = createStore(defaultValue, {
-    serialize: "ignore",
+    serialize: 'ignore',
   }) as StoreWritable<unknown>;
   let isMirroringFromOwnedStore = false;
 
-  Object.defineProperty((proxy as any).graphite.meta.stateRef, "current", {
+  Object.defineProperty((proxy as any).graphite.meta.stateRef, 'current', {
     get() {
       const owner = getCurrentOwnerContext();
 
@@ -1371,12 +1381,12 @@ function createCreatedStoreUnit<T extends AnyModel>(
     },
   });
 
-  const contractElement = meta.ownedModel["~contract"].shape[key];
+  const contractElement = meta.ownedModel['~contract'].shape[key];
   const target = ownedStoreCandidate;
 
   sample({
     clock: ownedStore.updates,
-    fn: (value) => {
+    fn: value => {
       isMirroringFromOwnedStore = true;
       return value;
     },
@@ -1389,7 +1399,7 @@ function createCreatedStoreUnit<T extends AnyModel>(
     target: meta.changed,
   });
 
-  if (contractElement?.["~kind"] === "store" && target) {
+  if (contractElement?.['~kind'] === 'store' && target) {
     const syncStoreTrigger = createEvent<{
       owner: OwnerContext | undefined;
       value: unknown;
@@ -1448,7 +1458,7 @@ function createCreatedModelApi<T extends AnyModel>(
   meta: CreatedModelMeta<T>,
   api: ModelApi,
   path: string[] = [],
-): CreatedModelApi<T["~api"]> {
+): CreatedModelApi<T['~api']> {
   const result: Record<string, unknown> = {};
 
   for (const [key, element] of Object.entries(api)) {
@@ -1482,12 +1492,12 @@ function createCreatedModelApi<T extends AnyModel>(
     result[key] = element;
   }
 
-  return result as CreatedModelApi<T["~api"]>;
+  return result as CreatedModelApi<T['~api']>;
 }
 
 export function createCreatedModel<T extends AnyModel>(
   model: T,
-  data?: Partial<ContractData<T["~contract"]>>,
+  data?: Partial<ContractData<T['~contract']>>,
   options?: ComponentCreateOptions,
 ): CreatedModel<T> {
   const handle = createReactModelHandle(model, data, options);
@@ -1497,7 +1507,7 @@ export function createCreatedModel<T extends AnyModel>(
     ownedModel: child(model),
     ownedId: handle.id,
   };
-  const created = createCreatedModelApi(meta, model["~api"]) as CreatedModel<T>;
+  const created = createCreatedModelApi(meta, model['~api']) as CreatedModel<T>;
 
   Object.defineProperty(created, reactCreatedModelMeta, {
     value: meta,
@@ -1510,17 +1520,17 @@ export function createCreatedModel<T extends AnyModel>(
 export function isReactModelHandle(
   value: unknown,
 ): value is ReactModelHandle<any> {
-  return isObject(value) && value["~kind"] === "react-model";
+  return isObject(value) && value['~kind'] === 'react-model';
 }
 
 export function createModelPayload<T extends Model<any, any>>(
   model: T,
   handle: ReactModelHandle<T>,
-): { id: string; data: ContractData<T["~contract"]> } {
+): { id: string; data: ContractData<T['~contract']> } {
   return {
     id: handle.id,
     data: {
-      ...getDefaultData(model["~contract"]),
+      ...getDefaultData(model['~contract']),
       ...handle.data,
     },
   };
@@ -1536,14 +1546,14 @@ export async function mountManagedModel<T extends Model<any, any>>(
     data: {
       ...createModelPayload(handle.model, handle).data,
       ...data,
-    } as ContractData<T["~contract"]>,
+    } as ContractData<T['~contract']>,
   };
 
   await callUnit(handle.model.create, payload, handle.scope);
-  const mountedUnit = handle.model["~api"]["$$mounted"];
+  const mountedUnit = handle.model['~api']['$$mounted'];
   const instance = getModelInstance(handle.model, handle.id, handle.scope);
 
-  if (typeof mountedUnit === "function" && instance) {
+  if (typeof mountedUnit === 'function' && instance) {
     await withInstanceContext(
       handle.model,
       instance,
@@ -1574,9 +1584,9 @@ export function launchManagedModel<T extends Model<any, any>>(
     );
     instance = getModelInstance(handle.model, handle.id, handle.scope);
   }
-  const mountedUnit = handle.model["~api"]["$$mounted"];
+  const mountedUnit = handle.model['~api']['$$mounted'];
 
-  if (typeof mountedUnit === "function" && instance) {
+  if (typeof mountedUnit === 'function' && instance) {
     withInstanceContext(
       handle.model,
       instance,
@@ -1607,10 +1617,10 @@ export function syncManagedModelData<T extends Model<any, any>>(
 export async function unmountManagedModel<T extends Model<any, any>>(
   handle: ReactModelHandle<T>,
 ): Promise<void> {
-  const unmountedUnit = handle.model["~api"]["$$unmounted"];
+  const unmountedUnit = handle.model['~api']['$$unmounted'];
   const instance = getModelInstance(handle.model, handle.id, handle.scope);
 
-  if (typeof unmountedUnit === "function" && instance) {
+  if (typeof unmountedUnit === 'function' && instance) {
     await withInstanceContext(
       handle.model,
       instance,
@@ -1625,10 +1635,10 @@ export async function unmountManagedModel<T extends Model<any, any>>(
 export function launchUnmountManagedModel<T extends Model<any, any>>(
   handle: ReactModelHandle<T>,
 ): void {
-  const unmountedUnit = handle.model["~api"]["$$unmounted"];
+  const unmountedUnit = handle.model['~api']['$$unmounted'];
   const instance = getModelInstance(handle.model, handle.id, handle.scope);
 
-  if (typeof unmountedUnit === "function" && instance) {
+  if (typeof unmountedUnit === 'function' && instance) {
     withInstanceContext(
       handle.model,
       instance,
@@ -1650,7 +1660,7 @@ export function toViewEntity<T extends Model<any, any>>(
 
 function transformToView(value: unknown, isRoot = false): unknown {
   if (Array.isArray(value)) {
-    return value.map((entry) => transformToView(entry));
+    return value.map(entry => transformToView(entry));
   }
 
   if (!isObject(value)) {
@@ -1664,12 +1674,12 @@ function transformToView(value: unknown, isRoot = false): unknown {
   const result: Record<string, unknown> = {};
 
   for (const [key, entry] of Object.entries(value)) {
-    if (typeof entry === "function" && !(isRoot && key === "id")) {
+    if (typeof entry === 'function' && !(isRoot && key === 'id')) {
       result[toViewHandlerName(key)] = entry;
       continue;
     }
 
-    const nextKey = isRoot && key === "id" ? key : normalizeViewKey(key);
+    const nextKey = isRoot && key === 'id' ? key : normalizeViewKey(key);
     result[nextKey] = transformToView(entry);
   }
 

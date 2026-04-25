@@ -1,13 +1,13 @@
-import type { Scope, StoreWritable } from "effector";
-import type { Model } from "../models";
+import type { Scope } from 'effector';
+import type { Model } from '../models';
 
 type DispatcherBaseEvent<Type extends string> = {
-  "~kind": Type;
+  '~kind': Type;
   payload: any;
 };
 
-export type DispatcherStoreChangedEvent = DispatcherBaseEvent<"store_changed">;
-export type DispatcherEventCalledEvent = DispatcherBaseEvent<"event_called">;
+export type DispatcherStoreChangedEvent = DispatcherBaseEvent<'store_changed'>;
+export type DispatcherEventCalledEvent = DispatcherBaseEvent<'event_called'>;
 
 export type DispatcherEvent =
   | DispatcherStoreChangedEvent

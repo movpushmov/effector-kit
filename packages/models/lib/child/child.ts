@@ -1,12 +1,12 @@
-import { createEvent, createStore, sample } from "effector";
-import { model, type Aliases, type Instances, type Model } from "../models";
-import type { Contract } from "../contracts";
+import { createEvent, createStore, sample } from 'effector';
+import { model, type Aliases, type Instances, type Model } from '../models';
+import type { Contract } from '../contracts';
 import {
   getContext,
   getDeclarationModelId,
   modifyChildAliasesStore,
   modifyChildStore,
-} from "../runtime";
+} from '../runtime';
 
 export function child<
   T extends Model<any, any>,
@@ -21,15 +21,15 @@ export function child<
   const childModel = model({
     instances: $instances,
     aliases: $aliases,
-    fn: inputModel["~fn"],
-    contract: inputModel["~contract"],
+    fn: inputModel['~fn'],
+    contract: inputModel['~contract'],
   }) as T;
 
   modifyChildStore(childModel, $instances, ownerModelId);
   modifyChildAliasesStore(childModel, $aliases, ownerModelId);
 
   if (ownerModelId) {
-    (childModel.lens as any)["~setContextModelId"]?.(ownerModelId);
+    (childModel.lens as any)['~setContextModelId']?.(ownerModelId);
   }
 
   type CreateParams = NonNullable<Parameters<typeof childModel.create>[0]>;
@@ -43,20 +43,22 @@ export function child<
   function hasValidOwnerContext(): boolean {
     const current = getContext().current;
 
-    return Boolean(current && ownerModelId && current.model["~id"] === ownerModelId);
+    return Boolean(
+      current && ownerModelId && current.model['~id'] === ownerModelId,
+    );
   }
 
   sample({
     clock: createInContext,
     filter: hasValidOwnerContext,
-    fn: (payload) => payload,
+    fn: payload => payload,
     target: internalCreate,
   });
 
   sample({
     clock: deleteInContext,
     filter: hasValidOwnerContext,
-    fn: (payload) => payload,
+    fn: payload => payload,
     target: internalDelete,
   });
 

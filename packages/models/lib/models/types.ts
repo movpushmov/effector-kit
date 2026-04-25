@@ -5,7 +5,7 @@ import type {
   Node,
   Store,
   StoreWritable,
-} from "effector";
+} from 'effector';
 import {
   type ChildElement,
   type Contract,
@@ -13,9 +13,9 @@ import {
   type RefElement,
   type ShapeElement,
   type StoreElement,
-} from "../contracts";
-import type { Lens, LensInputModel, LensProps } from "../lens";
-import type { Ref } from "../ref";
+} from '../contracts';
+import type { Lens, LensInputModel, LensProps } from '../lens';
+import type { Ref } from '../ref';
 
 export type Instances<T extends Contract<any>> = Record<
   string,
@@ -35,32 +35,32 @@ type OmitNever<T> = { [K in keyof T as T[K] extends never ? never : K]: T[K] };
 
 type ShapeElementData<T extends ShapeElement> =
   T extends StoreElement<any>
-    ? T["~type"]
+    ? T['~type']
     : T extends EventElement<any>
       ? never
       : T extends ChildElement<infer K>
-        ? Record<string, ContractData<K["~contract"]>>
+        ? Record<string, ContractData<K['~contract']>>
         : T extends RefElement<infer K>
-          ? ContractData<K["~contract"]> | null
+          ? ContractData<K['~contract']> | null
           : never;
 
 export type ContractData<T extends Contract<any>> = OmitNever<{
-  [k in keyof T["shape"]]: ShapeElementData<T["shape"][k]>;
+  [k in keyof T['shape']]: ShapeElementData<T['shape'][k]>;
 }>;
 
 type ShapeElementApi<T extends ShapeElement> =
   T extends StoreElement<any>
-    ? StoreWritable<T["~type"]>
+    ? StoreWritable<T['~type']>
     : T extends EventElement<any>
-      ? EventCallable<T["~type"]>
+      ? EventCallable<T['~type']>
       : T extends ChildElement<infer K>
-        ? Record<string, ContractApi<K["~contract"]>>
+        ? Record<string, ContractApi<K['~contract']>>
         : T extends RefElement<infer K>
-          ? ContractApi<K["~contract"]> | null
+          ? ContractApi<K['~contract']> | null
           : never;
 
 export type ContractApi<T extends Contract<any>> = OmitNever<{
-  [k in keyof T["shape"]]: ShapeElementApi<T["shape"][k]>;
+  [k in keyof T['shape']]: ShapeElementApi<T['shape'][k]>;
 }>;
 
 export type CreateInstancePayload<T extends Contract<any>> = {
@@ -82,19 +82,18 @@ export type ModelApi = {
   [k: string]: ModelApiElement;
 };
 
-type ModelLensTarget<T extends Contract<any>, Api extends ModelApi> = LensInputModel<
-  T,
-  Api,
-  Record<string, BaseInstance & ContractData<T>>
->;
+type ModelLensTarget<
+  T extends Contract<any>,
+  Api extends ModelApi,
+> = LensInputModel<T, Api, Record<string, BaseInstance & ContractData<T>>>;
 
 export interface Model<T extends Contract<any>, Api extends ModelApi> {
-  "~kind": "model";
-  "~contract": T;
-  "~api": Api;
-  "~fn": (api: ContractApi<T>) => Api;
-  "~id": string;
-  "~region": Node;
+  '~kind': 'model';
+  '~contract': T;
+  '~api': Api;
+  '~fn': (api: ContractApi<T>) => Api;
+  '~id': string;
+  '~region': Node;
 
   $instances: Store<Record<string, BaseInstance & ContractData<T>>>;
   $aliases: Store<Aliases>;
@@ -109,7 +108,7 @@ export interface Model<T extends Contract<any>, Api extends ModelApi> {
 }
 
 export interface BaseInstance {
-  "~refs": Record<string, Array<{ model: Model<any, any>; id: string }>>;
-  "~children": Record<string, Record<string, unknown>>;
-  "~childAliases": Record<string, Aliases>;
+  '~refs': Record<string, Array<{ model: Model<any, any>; id: string }>>;
+  '~children': Record<string, Record<string, unknown>>;
+  '~childAliases': Record<string, Aliases>;
 }

@@ -8,5 +8,5 @@ export type {
   Instances,
   Aliases,
   AddAliasPayload,
-} from "./types";
-export { model } from "./models";
+} from './types';
+export { model } from './models';

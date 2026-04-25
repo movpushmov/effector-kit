@@ -1,14 +1,14 @@
-import type { LensPredicate } from "./types";
-import type { UnionMap } from "../union";
+import type { LensPredicate } from './types';
+import type { UnionMap } from '../union';
 
 export function createMatchContext(entity: any, models: UnionMap) {
   return {
     match(config: Record<string, (data: any) => any>): any {
-      const handler = config[entity["~model"]];
+      const handler = config[entity['~model']];
       return handler ? handler(entity) : undefined;
     },
     uniqueId(variantKey: string, id: string): string {
-      return `${models[variantKey]?.["~id"] ?? variantKey}:${id}`;
+      return `${models[variantKey]?.['~id'] ?? variantKey}:${id}`;
     },
   };
 }
@@ -68,7 +68,7 @@ export function idsPredicate(ids: string[]): LensPredicate {
   if (ids.length === 1) {
     const id = ids[0];
 
-    return (instances) => {
+    return instances => {
       if (id === undefined) {
         return {};
       }
@@ -79,7 +79,7 @@ export function idsPredicate(ids: string[]): LensPredicate {
     };
   }
 
-  return (instances) => {
+  return instances => {
     const result: Record<string | number, any> = {};
 
     for (const id of ids) {

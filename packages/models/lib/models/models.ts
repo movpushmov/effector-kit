@@ -4,9 +4,9 @@ import {
   is,
   sample,
   type StoreWritable,
-} from "effector";
-import type { Contract } from "../contracts";
-import { is as runtimeIs } from "../is";
+} from 'effector';
+import type { Contract } from '../contracts';
+import { is as runtimeIs } from '../is';
 import type {
   ContractApi,
   ContractData,
@@ -16,7 +16,7 @@ import type {
   Instances,
   Model,
   ModelApi,
-} from "./types";
+} from './types';
 import {
   bindRegionModel,
   modifyDeclarations,
@@ -25,16 +25,16 @@ import {
   getEntityId,
   modifyStore,
   setDeclarationModelId,
-} from "../runtime";
-import { createApi, createStaticApi } from "./create-api";
-import { lens } from "../lens";
+} from '../runtime';
+import { createApi, createStaticApi } from './create-api';
+import { lens } from '../lens';
 import {
   addAliases,
   removeAliases,
   removeAliasesForCreatedInstances,
   removeAliasesForDeletedPayload,
   resolveDeleteIds,
-} from "./aliases";
+} from './aliases';
 
 interface ModelOptions<T extends Contract<any>, Api extends ModelApi> {
   contract: T;
@@ -43,9 +43,11 @@ interface ModelOptions<T extends Contract<any>, Api extends ModelApi> {
   aliases?: StoreWritable<Aliases>;
 }
 
-function isPlainModelApiObject(value: unknown): value is Record<string, unknown> {
+function isPlainModelApiObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
     !is.store(value) &&
     !runtimeIs.model(value) &&
@@ -55,7 +57,9 @@ function isPlainModelApiObject(value: unknown): value is Record<string, unknown>
 }
 
 function isWritableStore(value: unknown): value is StoreWritable<unknown> {
-  return is.store(value) && (value as StoreWritable<unknown>).targetable === true;
+  return (
+    is.store(value) && (value as StoreWritable<unknown>).targetable === true
+  );
 }
 
 export function model<T extends Contract<any>, Api extends ModelApi>({
@@ -91,14 +95,11 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
     })();
     const seenStores = new Set<StoreWritable<unknown>>();
 
-    function registerLocalStores(
-      value: unknown,
-      path: string[] = [],
-    ): void {
+    function registerLocalStores(value: unknown, path: string[] = []): void {
       if (isWritableStore(value)) {
         const existingField =
-          typeof (value as { ["~field"]?: unknown })["~field"] === "string"
-            ? ((value as { ["~field"]?: string })["~field"] as string)
+          typeof (value as { ['~field']?: unknown })['~field'] === 'string'
+            ? ((value as { ['~field']?: string })['~field'] as string)
             : undefined;
 
         if (existingField && existingField in contract.shape) {
@@ -111,14 +112,14 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
 
         seenStores.add(value);
 
-        const field = path.join(".");
+        const field = path.join('.');
 
         if (!field || field in contract.shape) {
           return;
         }
 
         localStoreDefaults[field] = value.getState();
-        Object.defineProperty(value, "~field", {
+        Object.defineProperty(value, '~field', {
           value: field,
           configurable: true,
         });
@@ -208,7 +209,9 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
     fn: ({ instances, aliases }, payload): Aliases => {
       const ctx = getContext();
       const contextInstance =
-        ctx.current?.model["~id"] === modelId ? ctx.current.instance : undefined;
+        ctx.current?.model['~id'] === modelId
+          ? ctx.current.instance
+          : undefined;
 
       return addAliases(aliases, instances, payload, contextInstance);
     },
@@ -223,14 +226,14 @@ export function model<T extends Contract<any>, Api extends ModelApi>({
   });
 
   const builtModel = {
-    "~kind": "model",
-    "~contract": contract,
-    "~api": modelApi,
-    "~fn": fn,
-    "~localStoreDefaults": localStoreDefaults,
+    '~kind': 'model',
+    '~contract': contract,
+    '~api': modelApi,
+    '~fn': fn,
+    '~localStoreDefaults': localStoreDefaults,
 
-    "~id": modelId,
-    "~region": region,
+    '~id': modelId,
+    '~region': region,
 
     $instances,
     $aliases,

@@ -1,12 +1,12 @@
-import { createEffect, createEvent, launch, sample } from "effector";
-import { is as modelIs } from "../is";
-import type { Model } from "../models";
-import type { Union, UnionMap } from "../union";
-import { createModelLensApi } from "./model-api";
+import { createEffect, createEvent, launch, sample } from 'effector';
+import { is as modelIs } from '../is';
+import type { Model } from '../models';
+import type { Union, UnionMap } from '../union';
+import { createModelLensApi } from './model-api';
 import {
   expandInstancesWithAliases,
   markSourceInstance,
-} from "../models/aliases";
+} from '../models/aliases';
 import {
   firstPredicate,
   idsPredicate,
@@ -14,8 +14,8 @@ import {
   singlePredicate,
   unionWherePredicate,
   wherePredicate,
-} from "./predicates";
-import { createLensState, type LensState } from "./state";
+} from './predicates';
+import { createLensState, type LensState } from './state';
 
 type ModelSourceGetter = (payload: any, source?: any) => Record<string, any>;
 type UnionSourceGetter = (
@@ -25,7 +25,7 @@ type UnionSourceGetter = (
 ) => Record<string, any>;
 
 interface ModelLensConfig {
-  kind: "model";
+  kind: 'model';
   model: Model<any, any>;
   source: any;
   predicates: any[];
@@ -36,7 +36,7 @@ interface ModelLensConfig {
 }
 
 interface UnionLensConfig {
-  kind: "union";
+  kind: 'union';
   input: Union<UnionMap>;
   activeKeys: string[];
   source: any;
@@ -72,23 +72,23 @@ function collectUnionInstances(
     const modelSource = source?.[key];
     const instances =
       modelSource &&
-      "instances" in modelSource &&
+      'instances' in modelSource &&
       modelSource.instances !== undefined
         ? modelSource.instances
-        : (modelSource as Record<string, any> | undefined) ??
+        : ((modelSource as Record<string, any> | undefined) ??
           model.$instances.getState() ??
-          {};
+          {});
     const aliases =
       modelSource &&
-      "aliases" in modelSource &&
+      'aliases' in modelSource &&
       modelSource.aliases !== undefined
         ? modelSource.aliases
-        : model.$aliases.getState() ?? {};
+        : (model.$aliases.getState() ?? {});
     const instancesWithAliases = expandInstancesWithAliases(instances, aliases);
 
     for (const [id, data] of Object.entries(instancesWithAliases)) {
-      result[`${model["~id"]}:${id}`] = markSourceInstance(
-        { ...(data as any), id, "~model": key },
+      result[`${model['~id']}:${id}`] = markSourceInstance(
+        { ...(data as any), id, '~model': key },
         data,
       );
     }
@@ -105,7 +105,7 @@ function selectVariantInstances(
   const result: Record<string, any> = {};
 
   for (const entity of Object.values(instances)) {
-    if (entity["~model"] !== variantKey) {
+    if (entity['~model'] !== variantKey) {
       continue;
     }
 
@@ -138,7 +138,9 @@ function getModelSource(model: Model<any, any>) {
   };
 }
 
-function getExpandedModelInstances(model: Model<any, any>): Record<string, any> {
+function getExpandedModelInstances(
+  model: Model<any, any>,
+): Record<string, any> {
   return expandInstancesWithAliases(
     model.$instances.getState() ?? {},
     model.$aliases.getState() ?? {},
@@ -149,22 +151,22 @@ function createModelConfig(
   model: Model<any, any>,
   sourceGetter: ModelSourceGetter = (_, source) => {
     const instances =
-      source && "instances" in source && source.instances !== undefined
+      source && 'instances' in source && source.instances !== undefined
         ? source.instances
-        : source ?? model.$instances.getState();
+        : (source ?? model.$instances.getState());
     const aliases =
-      source && "aliases" in source && source.aliases !== undefined
+      source && 'aliases' in source && source.aliases !== undefined
         ? source.aliases
         : model.$aliases.getState();
 
     return expandInstancesWithAliases(instances ?? {}, aliases ?? {});
   },
   getTargetModel: () => Model<any, any> = () => model,
-  getContextModelId: () => string = () => model["~id"],
+  getContextModelId: () => string = () => model['~id'],
   source: any = getModelSource(model),
 ): ModelLensConfig {
   return {
-    kind: "model",
+    kind: 'model',
     model,
     source,
     predicates: [],
@@ -177,7 +179,7 @@ function createModelConfig(
 
 function createUnionConfig(input: Union<UnionMap>): UnionLensConfig {
   return {
-    kind: "union",
+    kind: 'union',
     input,
     activeKeys: Object.keys(input.models),
     source: getUnionSource(input),
@@ -193,7 +195,7 @@ function createUnionConfig(input: Union<UnionMap>): UnionLensConfig {
 function cloneModelConfig(
   config: ModelLensConfig,
   predicate?: any,
-  patch?: Partial<Pick<ModelLensConfig, "singleResult">>,
+  patch?: Partial<Pick<ModelLensConfig, 'singleResult'>>,
 ): ModelLensConfig {
   return {
     ...config,
@@ -206,7 +208,7 @@ function cloneModelConfig(
 
 function cloneUnionConfig(
   config: UnionLensConfig,
-  patch?: Partial<Pick<UnionLensConfig, "activeKeys" | "singleResult">>,
+  patch?: Partial<Pick<UnionLensConfig, 'activeKeys' | 'singleResult'>>,
   predicate?: any,
 ): UnionLensConfig {
   return {
@@ -221,14 +223,14 @@ function cloneUnionConfig(
 
 function createModelState(config: ModelLensConfig): LensState {
   return createLensState(
-    (payload) => config.sourceRef.current(payload),
+    payload => config.sourceRef.current(payload),
     config.predicates,
   );
 }
 
 function createUnionState(config: UnionLensConfig): LensState {
   return createLensState(
-    (payload) => config.sourceRef.current(config.activeKeys, payload),
+    payload => config.sourceRef.current(config.activeKeys, payload),
     config.predicates,
   );
 }
@@ -268,14 +270,14 @@ function buildModelLens(config: ModelLensConfig): any {
 
       sample({
         clock: addAliasEvent,
-        fn: (payload) => {
-          if (typeof payload !== "string" && payload.instanceId !== undefined) {
+        fn: payload => {
+          if (typeof payload !== 'string' && payload.instanceId !== undefined) {
             return payload;
           }
 
           const entries = Object.entries(
             createLensState(
-              (payload) => config.sourceRef.current(payload),
+              payload => config.sourceRef.current(payload),
               config.predicates,
             ).getSource(payload),
           );
@@ -286,7 +288,7 @@ function buildModelLens(config: ModelLensConfig): any {
 
           const [id] = entries[0]!;
 
-          if (typeof payload === "string") {
+          if (typeof payload === 'string') {
             return { aliasId: payload, instanceId: id };
           }
 
@@ -300,7 +302,7 @@ function buildModelLens(config: ModelLensConfig): any {
 
       sample({
         clock: resolvedAliasAdded,
-        filter: (payload) => payload !== null,
+        filter: payload => payload !== null,
         target: config.model.addAlias,
       });
 
@@ -314,7 +316,7 @@ function buildModelLens(config: ModelLensConfig): any {
         fn: () =>
           Object.keys(
             createLensState(
-              (payload) => config.sourceRef.current(payload),
+              payload => config.sourceRef.current(payload),
               config.predicates,
             ).getSource(undefined),
           ),
@@ -327,11 +329,11 @@ function buildModelLens(config: ModelLensConfig): any {
       model: config.model,
       getTargetModel: config.getTargetModel,
       getContextModelId: config.getContextModelId,
-      getInstances: (payload) => state.getSource(payload),
+      getInstances: payload => state.getSource(payload),
     }),
   };
 
-  Object.defineProperty(lensObj, "getSource", {
+  Object.defineProperty(lensObj, 'getSource', {
     configurable: true,
     value: (source?: any) => {
       if (source === undefined) {
@@ -339,20 +341,20 @@ function buildModelLens(config: ModelLensConfig): any {
       }
 
       return createLensState(
-        (payload) => config.sourceRef.current(payload, source),
+        payload => config.sourceRef.current(payload, source),
         config.predicates,
       ).getSource(undefined);
     },
   });
 
-  Object.defineProperty(lensObj, "~setSourceGetter", {
+  Object.defineProperty(lensObj, '~setSourceGetter', {
     configurable: true,
     value: (nextGetter: ModelSourceGetter) => {
       config.sourceRef.current = nextGetter;
     },
   });
 
-  Object.defineProperty(lensObj, "~setSource", {
+  Object.defineProperty(lensObj, '~setSource', {
     configurable: true,
     value: ({
       source,
@@ -366,21 +368,21 @@ function buildModelLens(config: ModelLensConfig): any {
     },
   });
 
-  Object.defineProperty(lensObj, "~setContextModelId", {
+  Object.defineProperty(lensObj, '~setContextModelId', {
     configurable: true,
     value: (nextModelId: string) => {
       config.getContextModelId = () => nextModelId;
     },
   });
 
-  Object.defineProperty(lensObj, "~setContextModel", {
+  Object.defineProperty(lensObj, '~setContextModel', {
     configurable: true,
     value: (nextModel: Model<any, any>) => {
-      config.getContextModelId = () => nextModel["~id"];
+      config.getContextModelId = () => nextModel['~id'];
     },
   });
 
-  Object.defineProperty(lensObj, "~single", {
+  Object.defineProperty(lensObj, '~single', {
     configurable: true,
     value: config.singleResult,
   });
@@ -388,13 +390,13 @@ function buildModelLens(config: ModelLensConfig): any {
   return lensObj;
 }
 
-function buildUnionDelete(config: UnionLensConfig, state: LensState) {
+function buildUnionDelete(config: UnionLensConfig, _state: LensState) {
   const deleteEvent = createEvent<void>();
   const deleteFx = createEffect((entities: Record<string, any>) => {
     const grouped = new Map<Model<any, any>, string[]>();
 
     for (const entity of Object.values(entities)) {
-      const model = config.input.models[entity["~model"]];
+      const model = config.input.models[entity['~model']];
 
       if (!model) {
         continue;
@@ -413,7 +415,7 @@ function buildUnionDelete(config: UnionLensConfig, state: LensState) {
     clock: deleteEvent,
     fn: () =>
       createLensState(
-        (payload) => config.sourceRef.current(config.activeKeys, payload),
+        payload => config.sourceRef.current(config.activeKeys, payload),
         config.predicates,
       ).getSource(undefined),
     target: deleteFx,
@@ -446,33 +448,21 @@ function buildUnionLens(config: UnionLensConfig): any {
     },
     first() {
       return createLensRoot(
-        cloneUnionConfig(
-          config,
-          { singleResult: true },
-          firstPredicate,
-        ),
+        cloneUnionConfig(config, { singleResult: true }, firstPredicate),
       );
     },
     last() {
       return createLensRoot(
-        cloneUnionConfig(
-          config,
-          { singleResult: true },
-          lastPredicate,
-        ),
+        cloneUnionConfig(config, { singleResult: true }, lastPredicate),
       );
     },
     single() {
       return createLensRoot(
-        cloneUnionConfig(
-          config,
-          { singleResult: true },
-          singlePredicate,
-        ),
+        cloneUnionConfig(config, { singleResult: true }, singlePredicate),
       );
     },
     uniqueId(variantKey: string, id: string) {
-      return `${config.input.models[variantKey]?.["~id"] ?? variantKey}:${id}`;
+      return `${config.input.models[variantKey]?.['~id'] ?? variantKey}:${id}`;
     },
     delete() {
       return buildUnionDelete(config, state);
@@ -494,14 +484,14 @@ function buildUnionLens(config: UnionLensConfig): any {
         const subLens = createLensRoot(
           createModelConfig(
             model,
-            (payload) =>
+            payload =>
               selectVariantInstances(
                 state.getSource(payload),
                 key,
                 getExpandedModelInstances(model),
               ),
             () => model,
-            () => config.contextModelId ?? model["~id"],
+            () => config.contextModelId ?? model['~id'],
           ),
         );
 
@@ -530,19 +520,19 @@ function buildUnionLens(config: UnionLensConfig): any {
     lensObj[key] = createLensRoot(
       createModelConfig(
         model,
-        (payload) =>
-            selectVariantInstances(
-              state.getSource(payload),
-              key,
-              getExpandedModelInstances(model),
-            ),
+        payload =>
+          selectVariantInstances(
+            state.getSource(payload),
+            key,
+            getExpandedModelInstances(model),
+          ),
         () => model,
-        () => config.contextModelId ?? model["~id"],
+        () => config.contextModelId ?? model['~id'],
       ),
     );
   }
 
-  Object.defineProperty(lensObj, "getSource", {
+  Object.defineProperty(lensObj, 'getSource', {
     configurable: true,
     value: (source?: any) => {
       if (source === undefined) {
@@ -550,20 +540,20 @@ function buildUnionLens(config: UnionLensConfig): any {
       }
 
       return createLensState(
-        (payload) => config.sourceRef.current(config.activeKeys, payload, source),
+        payload => config.sourceRef.current(config.activeKeys, payload, source),
         config.predicates,
       ).getSource(undefined);
     },
   });
 
-  Object.defineProperty(lensObj, "~setSourceGetter", {
+  Object.defineProperty(lensObj, '~setSourceGetter', {
     configurable: true,
     value: (nextGetter: UnionSourceGetter) => {
       config.sourceRef.current = nextGetter;
     },
   });
 
-  Object.defineProperty(lensObj, "~setSource", {
+  Object.defineProperty(lensObj, '~setSource', {
     configurable: true,
     value: ({
       source,
@@ -577,12 +567,12 @@ function buildUnionLens(config: UnionLensConfig): any {
     },
   });
 
-  Object.defineProperty(lensObj, "~single", {
+  Object.defineProperty(lensObj, '~single', {
     configurable: true,
     value: config.singleResult,
   });
 
-  Object.defineProperty(lensObj, "~setContextModelId", {
+  Object.defineProperty(lensObj, '~setContextModelId', {
     configurable: true,
     value: (nextModelId: string) => {
       config.contextModelId = nextModelId;
@@ -597,7 +587,7 @@ export function createLensRoot(
 ): any {
   let config: LensConfig;
 
-  if ("kind" in (input as any)) {
+  if ('kind' in (input as any)) {
     config = input as LensConfig;
   } else if (modelIs.union(input)) {
     config = createUnionConfig(input as Union<UnionMap>);
@@ -605,7 +595,7 @@ export function createLensRoot(
     config = createModelConfig(input as Model<any, any>);
   }
 
-  if (config.kind === "union") {
+  if (config.kind === 'union') {
     return buildUnionLens(config);
   }
 

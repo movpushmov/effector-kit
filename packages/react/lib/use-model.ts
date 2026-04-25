@@ -1,7 +1,7 @@
-import type { Lens, Model, SingleLens } from "@effector-kit/models";
-import { useEffect, useLayoutEffect, useReducer, useRef } from "react";
-import { createWatch, type Scope } from "effector";
-import { useProvidedScope } from "effector-react";
+import type { Lens, Model, SingleLens } from '@effector-kit/models';
+import { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
+import { createWatch, type Scope } from 'effector';
+import { useProvidedScope } from 'effector-react';
 import {
   collectCreatedModelProxyUpdates,
   collectGraphUpdates,
@@ -20,13 +20,13 @@ import {
   resolveHandlePreviewEntity,
   resolveLensEntities,
   syncManagedModelData,
-} from "./runtime";
+} from './runtime';
 import type {
   CreatedModel,
   ReactModelEntity,
   ReactModelHandle,
   UseModelOptions,
-} from "./types";
+} from './types';
 
 type PreviewInstance = Record<string, unknown>;
 
@@ -49,7 +49,7 @@ function arePreviewInstancesEqual(
     return false;
   }
 
-  return leftKeys.every((key) => Object.is(left[key], right[key]));
+  return leftKeys.every(key => Object.is(left[key], right[key]));
 }
 
 function wrapPreviewEntity<T>(
@@ -57,7 +57,7 @@ function wrapPreviewEntity<T>(
   onHandlerCalled: () => void,
   seen = new WeakMap<object, unknown>(),
 ): T {
-  if (typeof value === "function") {
+  if (typeof value === 'function') {
     return ((...args: unknown[]) => {
       const result = (value as (...args: unknown[]) => unknown)(...args);
       onHandlerCalled();
@@ -65,7 +65,7 @@ function wrapPreviewEntity<T>(
     }) as T;
   }
 
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== 'object' || value === null) {
     return value;
   }
 
@@ -97,7 +97,7 @@ function wrapPreviewEntity<T>(
 }
 
 function scheduleMicrotask(callback: () => void): void {
-  if (typeof queueMicrotask === "function") {
+  if (typeof queueMicrotask === 'function') {
     queueMicrotask(callback);
     return;
   }
@@ -355,7 +355,7 @@ export function useModel<T extends Model<any, any>>(
   lensOrOptions?: Lens<T> | UseModelOptions<T>,
   maybeOptions?: UseModelOptions<T>,
 ): ReactModelEntity<T> | Array<ReactModelEntity<T>> | undefined {
-  const [, rerender] = useReducer((value) => value + 1, 0);
+  const [, rerender] = useReducer(value => value + 1, 0);
   const providedScope = useProvidedScope() ?? undefined;
   const isActiveRef = useRef(true);
   const pendingRerenderRef = useRef(false);
@@ -453,7 +453,11 @@ export function useModel<T extends Model<any, any>>(
           ? { scope: desiredScope }
           : undefined;
 
-    handleRef.current = createReactModelHandle(input, options.data, createOptions);
+    handleRef.current = createReactModelHandle(
+      input,
+      options.data,
+      createOptions,
+    );
   }
 
   const handle = handleRef.current!;

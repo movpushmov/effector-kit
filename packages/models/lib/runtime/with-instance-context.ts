@@ -1,7 +1,7 @@
-import { is, type Scope, type StoreWritable } from "effector";
-import { is as runtimeIs } from "../is";
-import type { Model } from "../models";
-import { getContext, setContext } from "./context";
+import { is, type Scope } from 'effector';
+import { is as runtimeIs } from '../is';
+import type { Model } from '../models';
+import { getContext, setContext } from './context';
 
 type StoreDescriptor = {
   field?: string;
@@ -44,9 +44,11 @@ type StateRefShape = {
 
 const storeDescriptorsCache = new WeakMap<object, StoreDescriptor[]>();
 
-function isPlainModelApiObject(value: unknown): value is Record<string, unknown> {
+function isPlainModelApiObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
     !is.store(value) &&
     !runtimeIs.model(value) &&
@@ -55,7 +57,9 @@ function isPlainModelApiObject(value: unknown): value is Record<string, unknown>
   );
 }
 
-function collectStoreDescriptors(api: Record<string, unknown>): StoreDescriptor[] {
+function collectStoreDescriptors(
+  api: Record<string, unknown>,
+): StoreDescriptor[] {
   const cached = storeDescriptorsCache.get(api);
 
   if (cached) {
@@ -68,8 +72,8 @@ function collectStoreDescriptors(api: Record<string, unknown>): StoreDescriptor[
   function visit(value: unknown): void {
     if (is.store(value)) {
       const field =
-        typeof (value as { ["~field"]?: unknown })["~field"] === "string"
-          ? ((value as { ["~field"]?: string })["~field"] as string)
+        typeof (value as { ['~field']?: unknown })['~field'] === 'string'
+          ? ((value as { ['~field']?: string })['~field'] as string)
           : undefined;
 
       if (seenStores.has(value as object)) {
@@ -78,7 +82,7 @@ function collectStoreDescriptors(api: Record<string, unknown>): StoreDescriptor[
 
       seenStores.add(value as object);
       const descriptor: StoreDescriptor = {
-        store: value as unknown as StoreDescriptor["store"],
+        store: value as unknown as StoreDescriptor['store'],
       };
 
       if (field !== undefined) {
@@ -109,17 +113,17 @@ function evaluateStateRef(stateRef: StateRefShape): unknown {
     return stateRef.current;
   }
 
-  if (stateRef.type === "list") {
-    return stateRef.before.map((step) =>
+  if (stateRef.type === 'list') {
+    return stateRef.before.map(step =>
       step.from ? evaluateStateRef(step.from) : undefined,
     );
   }
 
-  if (stateRef.type === "shape") {
+  if (stateRef.type === 'shape') {
     const template =
-      stateRef.current && typeof stateRef.current === "object"
+      stateRef.current && typeof stateRef.current === 'object'
         ? (stateRef.current as Record<string, unknown>)
-        : stateRef.initial && typeof stateRef.initial === "object"
+        : stateRef.initial && typeof stateRef.initial === 'object'
           ? (stateRef.initial as Record<string, unknown>)
           : {};
     const keys = Object.keys(template);
@@ -147,11 +151,13 @@ function primeScopeRefs(
   instance: Record<string, any>,
   scope?: Scope,
 ): void {
-  const scopeReg = (scope as
-    | (Scope & {
-        reg?: Record<string, { current: unknown }>;
-      })
-    | undefined)?.reg;
+  const scopeReg = (
+    scope as
+      | (Scope & {
+          reg?: Record<string, { current: unknown }>;
+        })
+      | undefined
+  )?.reg;
 
   if (!scopeReg) {
     return;
@@ -169,7 +175,7 @@ function primeScopeRefs(
     }
 
     const nextValue =
-      typeof field === "string" && field in instance
+      typeof field === 'string' && field in instance
         ? instance[field]
         : (() => {
             try {
@@ -197,7 +203,7 @@ export function withInstanceContext<T>(
 ): T {
   const previous = getContext();
   const descriptors = collectStoreDescriptors(
-    model["~api"] as Record<string, unknown>,
+    model['~api'] as Record<string, unknown>,
   );
   const derivedDescriptors = descriptors.filter(
     ({ store }) => store.targetable !== true,
