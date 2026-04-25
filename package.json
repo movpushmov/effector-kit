@@ -19,6 +19,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
+    "lint": "oxfmt ",
     "changeset": "changeset",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
@@ -30,5 +31,9 @@
     "release:status": "changeset status --verbose",
     "release:version": "changeset version && pnpm install",
     "release:publish": "pnpm release:verify && node ./scripts/release/publish.mjs"
+  },
+  "dependencies": {
+    "oxfmt": "^0.46.0",
+    "oxlint": "^1.61.0"
   }
 }
