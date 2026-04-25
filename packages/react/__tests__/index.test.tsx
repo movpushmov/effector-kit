@@ -104,10 +104,16 @@ function createDashboardModel() {
       const track = createEvent<string>();
       const setSelectedCount = createEvent<number>();
       const createItem = createEvent<{ id: string; data: { value: number } }>();
+      const untrack = createEvent<string>();
 
       sample({
         clock: track,
         target: selected.add,
+      });
+
+      sample({
+        clock: untrack,
+        target: selected.remove,
       });
 
       sample({
@@ -127,6 +133,8 @@ function createDashboardModel() {
         track,
         setSelectedCount,
         createItem,
+        trackedCountersIds: selected.$ids,
+        untrack,
       };
     },
   });
@@ -660,11 +668,17 @@ describe("@effector-kit/react", () => {
           <div data-testid="selected-counts">
             {entity.selected.map((item) => item.count).join(",") || "empty"}
           </div>
+          <div data-testid="tracked-counter-ids">
+            {entity.trackedCountersIds.join(",") || "empty"}
+          </div>
           <div data-testid="item-values">
             {entity.items.map((item) => item.value).join(",") || "empty"}
           </div>
           <button onClick={() => entity.onTrack("c1")} type="button">
             track counter
+          </button>
+          <button onClick={() => entity.onUntrack("c1")} type="button">
+            untrack counter
           </button>
           <button onClick={() => entity.onSetSelectedCount(9)} type="button">
             set selected count
@@ -691,6 +705,7 @@ describe("@effector-kit/react", () => {
     });
 
     expect(screen.getByTestId("selected-counts").textContent).toBe("empty");
+    expect(screen.getByTestId("tracked-counter-ids").textContent).toBe("empty");
     expect(screen.getByTestId("item-values").textContent).toBe("empty");
 
     fireEvent.click(screen.getByRole("button", { name: "track counter" }));
@@ -699,7 +714,15 @@ describe("@effector-kit/react", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("selected-counts").textContent).toBe("9");
+      expect(screen.getByTestId("tracked-counter-ids").textContent).toBe("c1");
       expect(screen.getByTestId("item-values").textContent).toBe("2");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "untrack counter" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-counts").textContent).toBe("empty");
+      expect(screen.getByTestId("tracked-counter-ids").textContent).toBe("empty");
     });
 
     fireEvent.click(
@@ -709,6 +732,57 @@ describe("@effector-kit/react", () => {
     await waitFor(() => {
       expect(screen.getByTestId("item-values").textContent).toBe("7");
     });
+  });
+
+  test("useModel exposes direct ref ids stores without a scope", async () => {
+    const { counterModel, dashboardModel } = createDashboardModel();
+
+    counterModel.create({ id: "c1", data: { count: 1 } });
+
+    function Harness() {
+      const entity = useModel(dashboardModel, {
+        data: { title: "Dashboard" },
+      });
+
+      return (
+        <div>
+          <div data-testid="tracked-counter-ids">
+            {entity.trackedCountersIds.join(",") || "empty"}
+          </div>
+          <button onClick={() => entity.onTrack("c1")} type="button">
+            track counter
+          </button>
+          <button onClick={() => entity.onUntrack("c1")} type="button">
+            untrack counter
+          </button>
+        </div>
+      );
+    }
+
+    const view = render(<Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("tracked-counter-ids").textContent).toBe(
+        "empty",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "track counter" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("tracked-counter-ids").textContent).toBe("c1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "untrack counter" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("tracked-counter-ids").textContent).toBe(
+        "empty",
+      );
+    });
+
+    view.unmount();
+    counterModel.delete("c1");
   });
 
   test("useModel normalizes root event names with on-prefix", async () => {

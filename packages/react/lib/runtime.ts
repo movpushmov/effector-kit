@@ -248,14 +248,20 @@ function evaluateStateRefValue(
 
   seen.add(stateRef);
 
-  if (!Array.isArray(stateRef.before) || stateRef.before.length === 0) {
-    return overrideValue ?? stateRef.current;
-  }
-
   if (stateRef.type === "list") {
+    if (!Array.isArray(stateRef.before) || stateRef.before.length === 0) {
+      const fallback = overrideValue ?? stateRef.current;
+
+      return Array.isArray(fallback) ? fallback : [];
+    }
+
     return stateRef.before.map((step) =>
       step.from ? evaluateStateRefValue(step.from, overrides, seen) : undefined,
     );
+  }
+
+  if (!Array.isArray(stateRef.before) || stateRef.before.length === 0) {
+    return overrideValue ?? stateRef.current;
   }
 
   if (stateRef.type === "shape") {
